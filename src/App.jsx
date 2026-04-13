@@ -1,5 +1,5 @@
-import { useState } from 'react'
-import { Plus, Search } from 'lucide-react'
+import { useState, useEffect } from 'react'
+import { Plus, Search, Sun, Moon } from 'lucide-react'
 import { useStore } from './hooks/useStore'
 import Sidebar from './components/Sidebar'
 import PromptCard from './components/PromptCard'
@@ -16,6 +16,13 @@ export default function App() {
   const [search, setSearch] = useState('')
   const [modal, setModal] = useState(null)
   const [form, setForm] = useState({})
+
+  const [isDark, setIsDark] = useState(() => localStorage.getItem('theme') !== 'light')
+
+  useEffect(() => {
+    document.documentElement.setAttribute('data-theme', isDark ? 'dark' : 'light')
+    localStorage.setItem('theme', isDark ? 'dark' : 'light')
+  }, [isDark])
 
   function openModal(type, extra = {}) {
     setForm(extra)
@@ -107,6 +114,13 @@ export default function App() {
             <span className={styles.viewCount}>{filtered.length} prompt{filtered.length !== 1 ? 's' : ''}</span>
           </div>
           <div className={styles.actions}>
+            <button
+              className={styles.themeBtn}
+              onClick={() => setIsDark(d => !d)}
+              title={isDark ? 'Modo claro' : 'Modo escuro'}
+            >
+              {isDark ? <Sun size={16} /> : <Moon size={16} />}
+            </button>
             <div className={styles.searchWrap}>
               <Search size={14} className={styles.searchIcon} />
               <input

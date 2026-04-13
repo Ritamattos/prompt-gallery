@@ -121,3 +121,22 @@
   transition: all 0.15s;
 }
 .emptyBtn:hover { background: var(--bg2); color: var(--text); border-color: var(--accent); }
+
+.themeBtn {
+  width: 36px;
+  height: 36px;
+  border-radius: var(--radius);
+  border: 1px solid var(--border2);
+  background: var(--bg2);
+  color: var(--text2);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  transition: all 0.15s;
+}
+.themeBtn:hover {
+  background: var(--bg3);
+  color: var(--text);
+  border-color: var(--accent);
+}
