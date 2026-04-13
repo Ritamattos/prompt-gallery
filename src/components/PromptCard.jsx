@@ -2,7 +2,9 @@ import { useRef, useState } from 'react'
 import { Copy, Check, Pencil, Trash2, ImagePlus } from 'lucide-react'
 import styles from './PromptCard.module.css'
 
-export default function PromptCard({ prompt, cat, sub, onEdit, onDelete, onImageUpload }) {
+const ASPECT_CSS = { '9:16': '9/16', '16:9': '16/9', '1:1': '1/1' }
+
+export default function PromptCard({ prompt, cat, sub, onEdit, onDelete, onImageUpload, onImageClick }) {
   const [copied, setCopied] = useState(false)
   const fileRef = useRef()
 
@@ -22,10 +24,18 @@ export default function PromptCard({ prompt, cat, sub, onEdit, onDelete, onImage
     e.target.value = ''
   }
 
+  const ratio = ASPECT_CSS[prompt.aspect] || '1/1'
+  const hasImg = Boolean(prompt.img)
+
   return (
     <div className={styles.card}>
-      <div className={styles.imgArea} onClick={() => fileRef.current.click()}>
-        {prompt.img
+      {/* Área da imagem */}
+      <div
+        className={styles.imgArea}
+        style={{ aspectRatio: ratio }}
+        onClick={() => hasImg ? onImageClick(prompt) : fileRef.current.click()}
+      >
+        {hasImg
           ? <img src={prompt.img} alt={prompt.name} className={styles.img} />
           : (
             <div className={styles.imgPlaceholder}>
@@ -35,8 +45,22 @@ export default function PromptCard({ prompt, cat, sub, onEdit, onDelete, onImage
           )
         }
         <div className={styles.imgOverlay}>
-          <ImagePlus size={16} strokeWidth={1.5} />
-          <span>Trocar imagem</span>
+          {hasImg
+            ? (
+              <button
+                className={styles.changeBtn}
+                onClick={e => { e.stopPropagation(); fileRef.current.click() }}
+              >
+                <ImagePlus size={13} /> Trocar imagem
+              </button>
+            )
+            : (
+              <>
+                <ImagePlus size={16} strokeWidth={1.5} />
+                <span>Subir imagem</span>
+              </>
+            )
+          }
         </div>
       </div>
       <input type="file" ref={fileRef} accept="image/*" style={{ display: 'none' }} onChange={handleFile} />
@@ -45,6 +69,7 @@ export default function PromptCard({ prompt, cat, sub, onEdit, onDelete, onImage
         <div className={styles.meta}>
           {cat && <span className={styles.tag}>{cat.icon} {cat.name}</span>}
           {sub && <span className={styles.tag2}>{sub.name}</span>}
+          <span className={styles.aspectTag}>{prompt.aspect || '1:1'}</span>
         </div>
         <div className={styles.name}>{prompt.name}</div>
         <p className={styles.text}>{prompt.text}</p>

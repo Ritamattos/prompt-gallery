@@ -1,35 +1,63 @@
-import { useState, useEffect } from 'react'
-import { Plus, Search, Sun, Moon } from 'lucide-react'
+import { useState, useEffect, useRef } from 'react'
+import { Plus, Search, Sun, Moon, LogOut } from 'lucide-react'
+import { supabase } from './lib/supabase'
 import { useStore } from './hooks/useStore'
 import Sidebar from './components/Sidebar'
 import PromptCard from './components/PromptCard'
 import Modal from './components/Modal'
 import Field from './components/Field'
+import Auth from './components/Auth'
+import ImageModal from './components/ImageModal'
 import styles from './App.module.css'
 
 export default function App() {
-  const store = useStore()
-  const { data } = store
-
-  const [selectedCat, setSelectedCat] = useState(null)
-  const [selectedSub, setSelectedSub] = useState(null)
-  const [search, setSearch] = useState('')
-  const [modal, setModal] = useState(null)
-  const [form, setForm] = useState({})
-
-  const [isDark, setIsDark] = useState(() => localStorage.getItem('theme') !== 'light')
+  const [session, setSession] = useState(undefined)
+  const [isDark, setIsDark]   = useState(() => localStorage.getItem('theme') !== 'light')
 
   useEffect(() => {
     document.documentElement.setAttribute('data-theme', isDark ? 'dark' : 'light')
     localStorage.setItem('theme', isDark ? 'dark' : 'light')
   }, [isDark])
 
-  function openModal(type, extra = {}) {
-    setForm(extra)
-    setModal(type)
-  }
-  function closeModal() { setModal(null); setForm({}) }
+  useEffect(() => {
+    supabase.auth.getSession().then(({ data: { session } }) => setSession(session))
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_, session) => setSession(session))
+    return () => subscription.unsubscribe()
+  }, [])
 
+  if (session === undefined) {
+    return (
+      <div className={styles.loadingScreen}>
+        <span className={styles.loadingIcon}>✶</span>
+      </div>
+    )
+  }
+
+  if (!session) return <Auth />
+  return <MainApp session={session} isDark={isDark} setIsDark={setIsDark} />
+}
+
+function MainApp({ session, isDark, setIsDark }) {
+  const store = useStore(session.user.id)
+  const { data, loading } = store
+
+  const [selectedCat, setSelectedCat] = useState(null)
+  const [selectedSub, setSelectedSub] = useState(null)
+  const [search, setSearch]           = useState('')
+  const [modal, setModal]             = useState(null)
+  const [form, setForm]               = useState({})
+  const [imgModal, setImgModal]       = useState(null)
+  const migrated = useRef(false)
+
+  useEffect(() => {
+    if (!loading && !migrated.current) {
+      migrated.current = true
+      store.migrateFromLocalStorage()
+    }
+  }, [loading])
+
+  function openModal(type, extra = {}) { setForm(extra); setModal(type) }
+  function closeModal()                { setModal(null); setForm({}) }
   function f(key) { return e => setForm(prev => ({ ...prev, [key]: e.target.value })) }
 
   function saveCategory() {
@@ -46,12 +74,15 @@ export default function App() {
 
   function savePrompt() {
     if (!form.name?.trim() || !form.catId) return
-    const payload = { catId: form.catId, subId: form.subId || null, name: form.name.trim(), text: form.text?.trim() || '' }
-    if (form.editId) {
-      store.updatePrompt(form.editId, payload)
-    } else {
-      store.addPrompt(payload)
+    const payload = {
+      catId:  form.catId,
+      subId:  form.subId || null,
+      name:   form.name.trim(),
+      text:   form.text?.trim() || '',
+      aspect: form.aspect || '1:1',
     }
+    if (form.editId) store.updatePrompt(form.editId, payload)
+    else             store.addPrompt(payload)
     closeModal()
   }
 
@@ -70,27 +101,30 @@ export default function App() {
   function editPrompt(prompt) {
     openModal('prompt', {
       editId: prompt.id,
-      catId: prompt.catId,
-      subId: prompt.subId,
-      name: prompt.name,
-      text: prompt.text,
+      catId:  prompt.catId,
+      subId:  prompt.subId,
+      name:   prompt.name,
+      text:   prompt.text,
+      aspect: prompt.aspect || '1:1',
     })
   }
 
-  const filtered = data.prompts.filter(p => {
-    if (selectedSub) return p.subId === selectedSub
-    if (selectedCat) return p.catId === selectedCat
-    return true
-  }).filter(p => {
-    if (!search) return true
-    const q = search.toLowerCase()
-    return p.name.toLowerCase().includes(q) || p.text.toLowerCase().includes(q)
-  })
+  async function handleLogout() { await supabase.auth.signOut() }
 
-  const cat = data.categories.find(c => c.id === selectedCat)
-  const sub = data.subcategories.find(s => s.id === selectedSub)
-  const viewTitle = sub?.name ?? (cat ? `${cat.icon} ${cat.name}` : 'Todos os prompts')
-
+  const filtered = data.prompts
+    .filter(p => {
+      if (selectedSub) return p.subId === selectedSub
+      if (selectedCat) return p.catId === selectedCat
+      return true
+    })
+    .filter(p => {
+      if (!search) return true
+      const q = search.toLowerCase()
+      return p.name.toLowerCase().includes(q) || p.text.toLowerCase().includes(q)
+    })
+  const cat       = data.categories.find(c => c.id === selectedCat)
+  const sub       = data.subcategories.find(s => s.id === selectedSub)
+  const viewTitle = sub?.name ?? (cat ? (cat.icon + ' ' + cat.name) : 'Todos os prompts')
   const subsByForm = data.subcategories.filter(s => s.catId === form.catId)
 
   return (
@@ -102,11 +136,10 @@ export default function App() {
         onSelectCat={setSelectedCat}
         onSelectSub={setSelectedSub}
         onAddCat={() => openModal('cat')}
-        onAddSub={(catId) => openModal('sub', { catId })}
+        onAddSub={catId => openModal('sub', { catId })}
         onDeleteCat={deleteCategory}
         onDeleteSub={deleteSub}
       />
-
       <main className={styles.main}>
         <div className={styles.topbar}>
           <div className={styles.viewHead}>
@@ -114,39 +147,29 @@ export default function App() {
             <span className={styles.viewCount}>{filtered.length} prompt{filtered.length !== 1 ? 's' : ''}</span>
           </div>
           <div className={styles.actions}>
-            <button
-              className={styles.themeBtn}
-              onClick={() => setIsDark(d => !d)}
-              title={isDark ? 'Modo claro' : 'Modo escuro'}
-            >
+            <button className={styles.themeBtn} onClick={() => setIsDark(d => !d)} title={isDark ? 'Modo claro' : 'Modo escuro'}>
               {isDark ? <Sun size={16} /> : <Moon size={16} />}
             </button>
             <div className={styles.searchWrap}>
               <Search size={14} className={styles.searchIcon} />
-              <input
-                className={styles.search}
-                placeholder="Buscar prompts..."
-                value={search}
-                onChange={e => setSearch(e.target.value)}
-              />
+              <input className={styles.search} placeholder='Buscar prompts...' value={search} onChange={e => setSearch(e.target.value)} />
             </div>
-            <button
-              className={styles.addBtn}
-              onClick={() => openModal('prompt', { catId: selectedCat || data.categories[0]?.id, subId: selectedSub })}
-            >
+            <button className={styles.addBtn} onClick={() => openModal('prompt', { catId: selectedCat || data.categories[0]?.id, subId: selectedSub, aspect: '1:1' })}>
               <Plus size={15} /> Novo prompt
+            </button>
+            <button className={styles.logoutBtn} onClick={handleLogout} title='Sair'>
+              <LogOut size={15} />
             </button>
           </div>
         </div>
 
-        {filtered.length === 0 ? (
+        {loading ? (
+          <div className={styles.loadingData}><span className={styles.loadingIcon}>✶</span></div>
+        ) : filtered.length === 0 ? (
           <div className={styles.empty}>
-            <div className={styles.emptyIcon}>✦</div>
+            <div className={styles.emptyIcon}>✶</div>
             <p>Nenhum prompt aqui ainda</p>
-            <button
-              className={styles.emptyBtn}
-              onClick={() => openModal('prompt', { catId: selectedCat || data.categories[0]?.id, subId: selectedSub })}
-            >
+            <button className={styles.emptyBtn} onClick={() => openModal('prompt', { catId: selectedCat || data.categories[0]?.id, subId: selectedSub, aspect: '1:1' })}>
               + Adicionar primeiro prompt
             </button>
           </div>
@@ -161,32 +184,32 @@ export default function App() {
                 onEdit={editPrompt}
                 onDelete={id => { if (confirm('Excluir este prompt?')) store.deletePrompt(id) }}
                 onImageUpload={store.setPromptImage}
+                onImageClick={setImgModal}
               />
             ))}
           </div>
         )}
       </main>
-
       {modal === 'cat' && (
-        <Modal title="Nova categoria" onClose={closeModal} onSave={saveCategory}>
-          <Field label="Nome da categoria">
-            <input placeholder="Ex: Casamento" value={form.name || ''} onChange={f('name')} autoFocus />
+        <Modal title='Nova categoria' onClose={closeModal} onSave={saveCategory}>
+          <Field label='Nome da categoria'>
+            <input placeholder='Ex: Casamento' value={form.name || ''} onChange={f('name')} autoFocus />
           </Field>
-          <Field label="Ícone (emoji)">
-            <input placeholder="Ex: 💍" value={form.icon || ''} onChange={f('icon')} maxLength={2} />
+          <Field label='Icone (emoji)'>
+            <input placeholder='Ex: 💍' value={form.icon || ''} onChange={f('icon')} maxLength={2} />
           </Field>
         </Modal>
       )}
 
       {modal === 'sub' && (
-        <Modal title="Nova subcategoria" onClose={closeModal} onSave={saveSub}>
-          <Field label="Categoria">
+        <Modal title='Nova subcategoria' onClose={closeModal} onSave={saveSub}>
+          <Field label='Categoria'>
             <select value={form.catId || ''} onChange={f('catId')}>
               {data.categories.map(c => <option key={c.id} value={c.id}>{c.icon} {c.name}</option>)}
             </select>
           </Field>
-          <Field label="Nome da subcategoria">
-            <input placeholder="Ex: Foto Realista" value={form.name || ''} onChange={f('name')} autoFocus />
+          <Field label='Nome da subcategoria'>
+            <input placeholder='Ex: Foto Realista' value={form.name || ''} onChange={f('name')} autoFocus />
           </Field>
         </Modal>
       )}
@@ -198,24 +221,35 @@ export default function App() {
           onSave={savePrompt}
           saveLabel={form.editId ? 'Salvar' : 'Adicionar'}
         >
-          <Field label="Categoria">
+          <Field label='Categoria'>
             <select value={form.catId || ''} onChange={e => setForm(prev => ({ ...prev, catId: e.target.value, subId: null }))}>
               {data.categories.map(c => <option key={c.id} value={c.id}>{c.icon} {c.name}</option>)}
             </select>
           </Field>
-          <Field label="Subcategoria">
+          <Field label='Subcategoria'>
             <select value={form.subId || ''} onChange={f('subId')}>
-              <option value="">— Nenhuma —</option>
+              <option value=''>— Nenhuma —</option>
               {subsByForm.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
             </select>
           </Field>
-          <Field label="Nome do prompt">
-            <input placeholder="Ex: Casal ao Pôr do Sol" value={form.name || ''} onChange={f('name')} autoFocus={!form.editId} />
+          <Field label='Nome do prompt'>
+            <input placeholder='Ex: Casal ao Por do Sol' value={form.name || ''} onChange={f('name')} autoFocus={!form.editId} />
           </Field>
-          <Field label="Prompt">
-            <textarea placeholder="Cole aqui o prompt completo..." value={form.text || ''} onChange={f('text')} rows={5} />
+          <Field label='Proporcao da imagem'>
+            <select value={form.aspect || '1:1'} onChange={f('aspect')}>
+              <option value='9:16'>9:16 — Retrato (vertical)</option>
+              <option value='1:1'>1:1 — Quadrado</option>
+              <option value='16:9'>16:9 — Paisagem (horizontal)</option>
+            </select>
+          </Field>
+          <Field label='Prompt'>
+            <textarea placeholder='Cole aqui o prompt completo...' value={form.text || ''} onChange={f('text')} rows={5} />
           </Field>
         </Modal>
+      )}
+
+      {imgModal && (
+        <ImageModal src={imgModal.img} name={imgModal.name} aspect={imgModal.aspect} onClose={() => setImgModal(null)} />
       )}
     </div>
   )
