@@ -20,7 +20,9 @@ export default function App() {
   }, [isDark])
 
   useEffect(() => {
-    supabase.auth.getSession().then(({ data: { session } }) => setSession(session))
+    supabase.auth.getSession()
+      .then(({ data: { session } }) => setSession(session))
+      .catch(() => setSession(null))
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_, session) => setSession(session))
     return () => subscription.unsubscribe()
   }, [])
