@@ -49,6 +49,7 @@ function MainApp({ session, isDark, setIsDark }) {
   const [modal, setModal]             = useState(null)
   const [form, setForm]               = useState({})
   const [imgModal, setImgModal]       = useState(null)
+  const [modalError, setModalError]   = useState(null)
   const migrated = useRef(false)
 
   useEffect(() => {
@@ -58,20 +59,24 @@ function MainApp({ session, isDark, setIsDark }) {
     }
   }, [loading])
 
-  function openModal(type, extra = {}) { setForm(extra); setModal(type) }
-  function closeModal()                { setModal(null); setForm({}) }
+  function openModal(type, extra = {}) { setForm(extra); setModal(type); setModalError(null) }
+  function closeModal()                { setModal(null); setForm({}); setModalError(null) }
   function f(key) { return e => setForm(prev => ({ ...prev, [key]: e.target.value })) }
 
-  function saveCategory() {
+  async function saveCategory() {
     if (!form.name?.trim()) return
-    store.addCategory(form.name.trim(), form.icon?.trim() || '📁')
-    closeModal()
+    try {
+      await store.addCategory(form.name.trim(), form.icon?.trim() || '📁')
+      closeModal()
+    } catch (err) { setModalError(err.message) }
   }
 
-  function saveSub() {
+  async function saveSub() {
     if (!form.name?.trim() || !form.catId) return
-    store.addSubcategory(form.catId, form.name.trim())
-    closeModal()
+    try {
+      await store.addSubcategory(form.catId, form.name.trim())
+      closeModal()
+    } catch (err) { setModalError(err.message) }
   }
 
   function savePrompt() {
@@ -83,9 +88,11 @@ function MainApp({ session, isDark, setIsDark }) {
       text:   form.text?.trim() || '',
       aspect: form.aspect || '1:1',
     }
-    if (form.editId) store.updatePrompt(form.editId, payload)
-    else             store.addPrompt(payload)
-    closeModal()
+    try {
+      if (form.editId) await store.updatePrompt(form.editId, payload)
+      else             await store.addPrompt(payload)
+      closeModal()
+    } catch (err) { setModalError(err.message) }
   }
 
   function deleteCategory(id) {
@@ -194,6 +201,8 @@ function MainApp({ session, isDark, setIsDark }) {
       </main>
       {modal === 'cat' && (
         <Modal title='Nova categoria' onClose={closeModal} onSave={saveCategory}>
+          {modalError && <p className={styles.modalError}>{modalError}</p>}
+
           <Field label='Nome da categoria'>
             <input placeholder='Ex: Casamento' value={form.name || ''} onChange={f('name')} autoFocus />
           </Field>
@@ -205,6 +214,8 @@ function MainApp({ session, isDark, setIsDark }) {
 
       {modal === 'sub' && (
         <Modal title='Nova subcategoria' onClose={closeModal} onSave={saveSub}>
+          {modalError && <p className={styles.modalError}>{modalError}</p>}
+
           <Field label='Categoria'>
             <select value={form.catId || ''} onChange={f('catId')}>
               {data.categories.map(c => <option key={c.id} value={c.id}>{c.icon} {c.name}</option>)}
@@ -223,6 +234,8 @@ function MainApp({ session, isDark, setIsDark }) {
           onSave={savePrompt}
           saveLabel={form.editId ? 'Salvar' : 'Adicionar'}
         >
+          {modalError && <p className={styles.modalError}>{modalError}</p>}
+
           <Field label='Categoria'>
             <select value={form.catId || ''} onChange={e => setForm(prev => ({ ...prev, catId: e.target.value, subId: null }))}>
               {data.categories.map(c => <option key={c.id} value={c.id}>{c.icon} {c.name}</option>)}

@@ -182,3 +182,12 @@
   0%, 100% { opacity: 1; transform: scale(1); }
   50%       { opacity: 0.4; transform: scale(0.88); }
 }
+
+.modalError {
+  font-size: 13px;
+  color: var(--danger);
+  background: var(--danger-dim);
+  border-radius: var(--radius);
+  padding: 8px 12px;
+  border: 1px solid var(--danger);
+}
