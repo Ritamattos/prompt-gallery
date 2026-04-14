@@ -1,10 +1,13 @@
 import { useRef, useState } from 'react'
-import { Copy, Check, Pencil, Trash2, ImagePlus } from 'lucide-react'
+import { Copy, Check, Pencil, Trash2, ImagePlus, GripHorizontal } from 'lucide-react'
 import styles from './PromptCard.module.css'
 
 const ASPECT_CSS = { '9:16': '9/16', '16:9': '16/9', '1:1': '1/1' }
 
-export default function PromptCard({ prompt, cat, sub, onEdit, onDelete, onImageUpload, onImageClick }) {
+export default function PromptCard({
+  prompt, cat, sub, onEdit, onDelete, onImageUpload, onImageClick,
+  dragging, dragOver, onDragStart, onDragOver, onDrop, onDragEnd,
+}) {
   const [copied, setCopied]       = useState(false)
   const [uploading, setUploading] = useState(false)
   const [uploadErr, setUploadErr] = useState(null)
@@ -35,8 +38,22 @@ export default function PromptCard({ prompt, cat, sub, onEdit, onDelete, onImage
   const ratio = ASPECT_CSS[prompt.aspect] || '1/1'
   const hasImg = Boolean(prompt.img)
 
+  const cardClass = [
+    styles.card,
+    dragging  ? styles.dragging : '',
+    dragOver  ? styles.dragOver : '',
+  ].join(' ')
+
   return (
-    <div className={styles.card}>
+    <div
+      className={cardClass}
+      draggable
+      onDragStart={onDragStart}
+      onDragOver={onDragOver}
+      onDrop={onDrop}
+      onDragEnd={onDragEnd}
+    >
+      <div className={styles.grip}><GripHorizontal size={13} /></div>
       {/* Área da imagem */}
       <div
         className={styles.imgArea}

@@ -29,6 +29,7 @@ create table if not exists prompts (
   text       text        not null default '',
   img        text,
   aspect     text        not null default '1:1',
+  sort_order integer     not null default 0,
   created_at timestamptz default now()
 );
 

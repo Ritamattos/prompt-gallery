@@ -50,6 +50,8 @@ function MainApp({ session, isDark, setIsDark }) {
   const [form, setForm]               = useState({})
   const [imgModal, setImgModal]       = useState(null)
   const [modalError, setModalError]   = useState(null)
+  const [draggedPId, setDraggedPId]   = useState(null)
+  const [dragOverPId, setDragOverPId] = useState(null)
   const migrated = useRef(false)
 
   useEffect(() => {
@@ -106,6 +108,22 @@ function MainApp({ session, isDark, setIsDark }) {
 
   function reorderCats(orderedIds) { store.reorderCategories(orderedIds).catch(console.error) }
   function reorderSubs(catId, orderedIds) { store.reorderSubcategories(catId, orderedIds).catch(console.error) }
+
+  function promptDragStart(id) { setDraggedPId(id) }
+  function promptDragOver(e, id) { e.preventDefault(); if (id !== draggedPId) setDragOverPId(id) }
+  function promptDragEnd() { setDraggedPId(null); setDragOverPId(null) }
+  function promptDrop(targetId) {
+    setDragOverPId(null)
+    if (!draggedPId || draggedPId === targetId) { setDraggedPId(null); return }
+    const from = filtered.findIndex(p => p.id === draggedPId)
+    const to   = filtered.findIndex(p => p.id === targetId)
+    setDraggedPId(null)
+    if (from < 0 || to < 0) return
+    const next = [...filtered]
+    const [item] = next.splice(from, 1)
+    next.splice(to, 0, item)
+    store.reorderPrompts(next.map(p => p.id)).catch(console.error)
+  }
 
   async function savePrompt() {
     if (!form.name?.trim() || !form.catId) return
@@ -226,6 +244,12 @@ function MainApp({ session, isDark, setIsDark }) {
                 onDelete={id => { if (confirm('Excluir este prompt?')) store.deletePrompt(id) }}
                 onImageUpload={store.setPromptImage}
                 onImageClick={setImgModal}
+                dragging={draggedPId === p.id}
+                dragOver={dragOverPId === p.id}
+                onDragStart={() => promptDragStart(p.id)}
+                onDragOver={e => promptDragOver(e, p.id)}
+                onDrop={() => promptDrop(p.id)}
+                onDragEnd={promptDragEnd}
               />
             ))}
           </div>

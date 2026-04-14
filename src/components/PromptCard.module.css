@@ -5,9 +5,24 @@
   overflow: hidden;
   display: flex;
   flex-direction: column;
-  transition: border-color 0.2s, transform 0.2s;
+  transition: border-color 0.2s, transform 0.2s, opacity 0.15s;
+  cursor: grab;
 }
 .card:hover { border-color: var(--border2); transform: translateY(-2px); }
+.card:active { cursor: grabbing; }
+.dragging { opacity: 0.35; transform: scale(0.98); }
+.dragOver { border-color: var(--accent); box-shadow: 0 0 0 2px var(--accent-dim); transform: translateY(-2px); }
+
+.grip {
+  display: flex;
+  justify-content: center;
+  padding: 5px 0 2px;
+  color: var(--text3);
+  opacity: 0;
+  transition: opacity 0.15s;
+  flex-shrink: 0;
+}
+.card:hover .grip { opacity: 1; }
 
 /* Área da imagem — altura determinada pelo aspect-ratio inline */
 .imgArea {

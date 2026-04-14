@@ -3,7 +3,7 @@ import { supabase } from '../lib/supabase'
 
 const mapCat    = r => ({ id: r.id, name: r.name, icon: r.icon, sortOrder: r.sort_order ?? 0 })
 const mapSub    = r => ({ id: r.id, catId: r.cat_id, name: r.name, sortOrder: r.sort_order ?? 0 })
-const mapPrompt = r => ({ id: r.id, catId: r.cat_id, subId: r.sub_id, name: r.name, text: r.text, img: r.img, aspect: r.aspect || '1:1' })
+const mapPrompt = r => ({ id: r.id, catId: r.cat_id, subId: r.sub_id, name: r.name, text: r.text, img: r.img, aspect: r.aspect || '1:1', sortOrder: r.sort_order ?? 0 })
 const EMPTY = { categories: [], subcategories: [], prompts: [] }
 
 function throwIf(error, label) {
@@ -25,20 +25,21 @@ export function useStore(userId) {
       const [cR, sR, pR] = await Promise.all([
         supabase.from('categories').select('*').order('sort_order').order('created_at'),
         supabase.from('subcategories').select('*').order('sort_order').order('created_at'),
-        supabase.from('prompts').select('*').order('created_at'),
+        supabase.from('prompts').select('*').order('sort_order').order('created_at'),
       ])
       // If sort_order column doesn't exist yet, fall back to ordering by created_at only
-      const [cFinal, sFinal] = await Promise.all([
+      const [cFinal, sFinal, pFinal] = await Promise.all([
         cR.error ? supabase.from('categories').select('*').order('created_at') : Promise.resolve(cR),
         sR.error ? supabase.from('subcategories').select('*').order('created_at') : Promise.resolve(sR),
+        pR.error ? supabase.from('prompts').select('*').order('created_at') : Promise.resolve(pR),
       ])
       if (cFinal.error) console.error('[useStore] categories:', cFinal.error)
       if (sFinal.error) console.error('[useStore] subcategories:', sFinal.error)
-      if (pR.error)     console.error('[useStore] prompts:', pR.error)
+      if (pFinal.error) console.error('[useStore] prompts:', pFinal.error)
       setData({
         categories:    (cFinal.data || []).map(mapCat),
         subcategories: (sFinal.data || []).map(mapSub),
-        prompts:       (pR.data    || []).map(mapPrompt),
+        prompts:       (pFinal.data || []).map(mapPrompt),
       })
     } catch (e) { console.error('[useStore] loadAll:', e) }
     finally { setLoading(false) }
@@ -196,11 +197,25 @@ export function useStore(userId) {
     } catch (e) { console.error('[useStore] migrate:', e) }
   }, [userId])
 
+  const reorderPrompts = useCallback(async (orderedIds) => {
+    const updates = orderedIds.map((id, i) => ({ id, sortOrder: i }))
+    const results = await Promise.all(
+      updates.map(u => supabase.from('prompts').update({ sort_order: u.sortOrder }).eq('id', u.id))
+    )
+    results.forEach((r, i) => throwIf(r.error, 'reorderPrompts #' + i))
+    setData(d => ({
+      ...d,
+      prompts: d.prompts
+        .map(p => { const u = updates.find(u => u.id === p.id); return u ? { ...p, sortOrder: u.sortOrder } : p })
+        .sort((a, b) => (a.sortOrder ?? 0) - (b.sortOrder ?? 0)),
+    }))
+  }, [])
+
   return {
     data, loading,
     addCategory, updateCategory, deleteCategory, reorderCategories,
     addSubcategory, updateSubcategory, deleteSubcategory, reorderSubcategories,
-    addPrompt, updatePrompt, deletePrompt, setPromptImage,
+    addPrompt, updatePrompt, deletePrompt, setPromptImage, reorderPrompts,
     migrateFromLocalStorage,
   }
 }
