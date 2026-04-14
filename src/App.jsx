@@ -104,8 +104,8 @@ function MainApp({ session, isDark, setIsDark }) {
     } catch (err) { setModalError(err.message) }
   }
 
-  function moveCat(id, dir) { store.moveCategory(id, dir, data.categories).catch(console.error) }
-  function moveSub(id, dir) { store.moveSubcategory(id, dir, data.subcategories).catch(console.error) }
+  function reorderCats(orderedIds) { store.reorderCategories(orderedIds).catch(console.error) }
+  function reorderSubs(catId, orderedIds) { store.reorderSubcategories(catId, orderedIds).catch(console.error) }
 
   async function savePrompt() {
     if (!form.name?.trim() || !form.catId) return
@@ -178,8 +178,8 @@ function MainApp({ session, isDark, setIsDark }) {
         onDeleteSub={deleteSub}
         onEditCat={openEditCat}
         onEditSub={openEditSub}
-        onMoveCat={moveCat}
-        onMoveSub={moveSub}
+        onReorderCats={reorderCats}
+        onReorderSubs={reorderSubs}
       />
       <main className={styles.main}>
         <div className={styles.topbar}>

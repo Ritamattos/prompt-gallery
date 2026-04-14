@@ -98,6 +98,25 @@
 }
 .item.active .count { background: var(--accent-dim2); color: var(--accent); }
 
+.dragRow {
+  border-radius: var(--radius);
+  transition: opacity 0.15s;
+}
+.dragging  { opacity: 0.35; }
+.dragOver  { outline: 1px dashed var(--accent); background: var(--accent-dim); border-radius: var(--radius); }
+
+.grip {
+  color: var(--text3);
+  opacity: 0;
+  display: flex;
+  align-items: center;
+  flex-shrink: 0;
+  cursor: grab;
+  margin-right: -2px;
+}
+.dragRow:hover .grip  { opacity: 1; }
+.dragging .grip       { opacity: 1; cursor: grabbing; }
+
 .menuBtn {
   width: 20px;
   height: 20px;
@@ -111,8 +130,7 @@
   opacity: 0;
   flex-shrink: 0;
 }
-.item:hover .menuBtn,
-.subItem:hover .menuBtn { opacity: 1; }
+.dragRow:hover .menuBtn { opacity: 1; }
 .menuBtn:hover { background: var(--bg4); color: var(--text); }
 
 .dropdown {

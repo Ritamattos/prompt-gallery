@@ -71,18 +71,12 @@ export function useStore(userId) {
     }))
   }, [])
 
-  const moveCategory = useCallback(async (id, direction, currentCats) => {
-    const sorted = [...currentCats].sort((a, b) => (a.sortOrder ?? 0) - (b.sortOrder ?? 0))
-    const idx    = sorted.findIndex(c => c.id === id)
-    const target = direction === 'up' ? idx - 1 : idx + 1
-    if (idx < 0 || target < 0 || target >= sorted.length) return
-    // Swap positions then assign clean sequential sort_orders (0,1,2…)
-    ;[sorted[idx], sorted[target]] = [sorted[target], sorted[idx]]
-    const updates = sorted.map((c, i) => ({ id: c.id, sortOrder: i }))
+  const reorderCategories = useCallback(async (orderedIds) => {
+    const updates = orderedIds.map((id, i) => ({ id, sortOrder: i }))
     const results = await Promise.all(
       updates.map(u => supabase.from('categories').update({ sort_order: u.sortOrder }).eq('id', u.id))
     )
-    results.forEach((r, i) => throwIf(r.error, 'moveCategory #' + i))
+    results.forEach((r, i) => throwIf(r.error, 'reorderCategories #' + i))
     setData(d => ({
       ...d,
       categories: d.categories
@@ -116,19 +110,12 @@ export function useStore(userId) {
     }))
   }, [])
 
-  const moveSubcategory = useCallback(async (id, direction, allSubs) => {
-    const sub     = allSubs.find(s => s.id === id); if (!sub) return
-    const catSubs = allSubs.filter(s => s.catId === sub.catId).sort((a, b) => (a.sortOrder ?? 0) - (b.sortOrder ?? 0))
-    const idx     = catSubs.findIndex(s => s.id === id)
-    const target  = direction === 'up' ? idx - 1 : idx + 1
-    if (idx < 0 || target < 0 || target >= catSubs.length) return
-    // Swap positions then assign clean sequential sort_orders (0,1,2…)
-    ;[catSubs[idx], catSubs[target]] = [catSubs[target], catSubs[idx]]
-    const updates = catSubs.map((s, i) => ({ id: s.id, sortOrder: i }))
+  const reorderSubcategories = useCallback(async (catId, orderedIds) => {
+    const updates = orderedIds.map((id, i) => ({ id, sortOrder: i }))
     const results = await Promise.all(
       updates.map(u => supabase.from('subcategories').update({ sort_order: u.sortOrder }).eq('id', u.id))
     )
-    results.forEach((r, i) => throwIf(r.error, 'moveSubcategory #' + i))
+    results.forEach((r, i) => throwIf(r.error, 'reorderSubcategories #' + i))
     setData(d => ({
       ...d,
       subcategories: d.subcategories
@@ -208,8 +195,8 @@ export function useStore(userId) {
 
   return {
     data, loading,
-    addCategory, updateCategory, deleteCategory, moveCategory,
-    addSubcategory, updateSubcategory, deleteSubcategory, moveSubcategory,
+    addCategory, updateCategory, deleteCategory, reorderCategories,
+    addSubcategory, updateSubcategory, deleteSubcategory, reorderSubcategories,
     addPrompt, updatePrompt, deletePrompt, setPromptImage,
     migrateFromLocalStorage,
   }
