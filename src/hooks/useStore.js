@@ -27,13 +27,18 @@ export function useStore(userId) {
         supabase.from('subcategories').select('*').order('sort_order').order('created_at'),
         supabase.from('prompts').select('*').order('created_at'),
       ])
-      if (cR.error) console.error('[useStore] categories:', cR.error)
-      if (sR.error) console.error('[useStore] subcategories:', sR.error)
-      if (pR.error) console.error('[useStore] prompts:', pR.error)
+      // If sort_order column doesn't exist yet, fall back to ordering by created_at only
+      const [cFinal, sFinal] = await Promise.all([
+        cR.error ? supabase.from('categories').select('*').order('created_at') : Promise.resolve(cR),
+        sR.error ? supabase.from('subcategories').select('*').order('created_at') : Promise.resolve(sR),
+      ])
+      if (cFinal.error) console.error('[useStore] categories:', cFinal.error)
+      if (sFinal.error) console.error('[useStore] subcategories:', sFinal.error)
+      if (pR.error)     console.error('[useStore] prompts:', pR.error)
       setData({
-        categories:    (cR.data || []).map(mapCat),
-        subcategories: (sR.data || []).map(mapSub),
-        prompts:       (pR.data || []).map(mapPrompt),
+        categories:    (cFinal.data || []).map(mapCat),
+        subcategories: (sFinal.data || []).map(mapSub),
+        prompts:       (pR.data    || []).map(mapPrompt),
       })
     } catch (e) { console.error('[useStore] loadAll:', e) }
     finally { setLoading(false) }
