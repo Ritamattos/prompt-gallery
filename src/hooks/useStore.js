@@ -76,18 +76,18 @@ export function useStore(userId) {
     const idx    = sorted.findIndex(c => c.id === id)
     const target = direction === 'up' ? idx - 1 : idx + 1
     if (idx < 0 || target < 0 || target >= sorted.length) return
-    const a = sorted[idx], b = sorted[target]
-    const aOrd = a.sortOrder ?? idx, bOrd = b.sortOrder ?? target
-    const [r1, r2] = await Promise.all([
-      supabase.from('categories').update({ sort_order: bOrd }).eq('id', a.id),
-      supabase.from('categories').update({ sort_order: aOrd }).eq('id', b.id),
-    ])
-    throwIf(r1.error, 'moveCategory'); throwIf(r2.error, 'moveCategory')
+    // Swap positions then assign clean sequential sort_orders (0,1,2…)
+    ;[sorted[idx], sorted[target]] = [sorted[target], sorted[idx]]
+    const updates = sorted.map((c, i) => ({ id: c.id, sortOrder: i }))
+    const results = await Promise.all(
+      updates.map(u => supabase.from('categories').update({ sort_order: u.sortOrder }).eq('id', u.id))
+    )
+    results.forEach((r, i) => throwIf(r.error, 'moveCategory #' + i))
     setData(d => ({
       ...d,
       categories: d.categories
-        .map(c => c.id === a.id ? { ...c, sortOrder: bOrd } : c.id === b.id ? { ...c, sortOrder: aOrd } : c)
-        .sort((x, y) => (x.sortOrder ?? 0) - (y.sortOrder ?? 0)),
+        .map(c => { const u = updates.find(u => u.id === c.id); return u ? { ...c, sortOrder: u.sortOrder } : c })
+        .sort((a, b) => (a.sortOrder ?? 0) - (b.sortOrder ?? 0)),
     }))
   }, [])
 
@@ -122,18 +122,18 @@ export function useStore(userId) {
     const idx     = catSubs.findIndex(s => s.id === id)
     const target  = direction === 'up' ? idx - 1 : idx + 1
     if (idx < 0 || target < 0 || target >= catSubs.length) return
-    const a = catSubs[idx], b = catSubs[target]
-    const aOrd = a.sortOrder ?? idx, bOrd = b.sortOrder ?? target
-    const [r1, r2] = await Promise.all([
-      supabase.from('subcategories').update({ sort_order: bOrd }).eq('id', a.id),
-      supabase.from('subcategories').update({ sort_order: aOrd }).eq('id', b.id),
-    ])
-    throwIf(r1.error, 'moveSubcategory'); throwIf(r2.error, 'moveSubcategory')
+    // Swap positions then assign clean sequential sort_orders (0,1,2…)
+    ;[catSubs[idx], catSubs[target]] = [catSubs[target], catSubs[idx]]
+    const updates = catSubs.map((s, i) => ({ id: s.id, sortOrder: i }))
+    const results = await Promise.all(
+      updates.map(u => supabase.from('subcategories').update({ sort_order: u.sortOrder }).eq('id', u.id))
+    )
+    results.forEach((r, i) => throwIf(r.error, 'moveSubcategory #' + i))
     setData(d => ({
       ...d,
       subcategories: d.subcategories
-        .map(s => s.id === a.id ? { ...s, sortOrder: bOrd } : s.id === b.id ? { ...s, sortOrder: aOrd } : s)
-        .sort((x, y) => (x.sortOrder ?? 0) - (y.sortOrder ?? 0)),
+        .map(s => { const u = updates.find(u => u.id === s.id); return u ? { ...s, sortOrder: u.sortOrder } : s })
+        .sort((a, b) => (a.sortOrder ?? 0) - (b.sortOrder ?? 0)),
     }))
   }, [])
 
