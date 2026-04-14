@@ -1,20 +1,13 @@
 import { useState, useEffect, useCallback } from 'react'
 import { supabase } from '../lib/supabase'
 
-const mapCat    = r => ({ id: r.id, name: r.name, icon: r.icon })
-const mapSub    = r => ({ id: r.id, catId: r.cat_id, name: r.name })
-const mapPrompt = r => ({
-  id: r.id, catId: r.cat_id, subId: r.sub_id,
-  name: r.name, text: r.text, img: r.img, aspect: r.aspect || '1:1',
-})
-
+const mapCat    = r => ({ id: r.id, name: r.name, icon: r.icon, sortOrder: r.sort_order ?? 0 })
+const mapSub    = r => ({ id: r.id, catId: r.cat_id, name: r.name, sortOrder: r.sort_order ?? 0 })
+const mapPrompt = r => ({ id: r.id, catId: r.cat_id, subId: r.sub_id, name: r.name, text: r.text, img: r.img, aspect: r.aspect || '1:1' })
 const EMPTY = { categories: [], subcategories: [], prompts: [] }
 
 function throwIf(error, label) {
-  if (error) {
-    console.error(`[useStore] ${label}:`, error)
-    throw new Error(error.message || label)
-  }
+  if (error) { console.error('[useStore] ' + label + ':', error); throw new Error(error.message || label) }
 }
 
 export function useStore(userId) {
@@ -30,34 +23,37 @@ export function useStore(userId) {
     setLoading(true)
     try {
       const [cR, sR, pR] = await Promise.all([
-        supabase.from('categories').select('*').order('created_at'),
-        supabase.from('subcategories').select('*').order('created_at'),
+        supabase.from('categories').select('*').order('sort_order').order('created_at'),
+        supabase.from('subcategories').select('*').order('sort_order').order('created_at'),
         supabase.from('prompts').select('*').order('created_at'),
       ])
-      if (cR.error) console.error('[useStore] loadAll categories:', cR.error)
-      if (sR.error) console.error('[useStore] loadAll subcategories:', sR.error)
-      if (pR.error) console.error('[useStore] loadAll prompts:', pR.error)
+      if (cR.error) console.error('[useStore] categories:', cR.error)
+      if (sR.error) console.error('[useStore] subcategories:', sR.error)
+      if (pR.error) console.error('[useStore] prompts:', pR.error)
       setData({
         categories:    (cR.data || []).map(mapCat),
         subcategories: (sR.data || []).map(mapSub),
         prompts:       (pR.data || []).map(mapPrompt),
       })
-    } catch (e) {
-      console.error('[useStore] loadAll exception:', e)
-    } finally {
-      setLoading(false)
-    }
+    } catch (e) { console.error('[useStore] loadAll:', e) }
+    finally { setLoading(false) }
   }
 
-  const addCategory = useCallback(async (name, icon) => {
-    const { data: row, error } = await supabase
-      .from('categories')
-      .insert({ user_id: userId, name, icon: icon || '📁' })
-      .select()
-      .single()
+  const addCategory = useCallback(async (name, icon, sortOrder = 0) => {
+    const { data: row, error } = await supabase.from('categories')
+      .insert({ user_id: userId, name, icon: icon || '📁', sort_order: sortOrder }).select().single()
     throwIf(error, 'addCategory')
     setData(d => ({ ...d, categories: [...d.categories, mapCat(row)] }))
   }, [userId])
+
+  const updateCategory = useCallback(async (id, fields) => {
+    const patch = {}
+    if (fields.name !== undefined) patch.name = fields.name
+    if (fields.icon !== undefined) patch.icon = fields.icon
+    const { error } = await supabase.from('categories').update(patch).eq('id', id)
+    throwIf(error, 'updateCategory')
+    setData(d => ({ ...d, categories: d.categories.map(c => c.id === id ? { ...c, ...fields } : c) }))
+  }, [])
 
   const deleteCategory = useCallback(async (id) => {
     const { error } = await supabase.from('categories').delete().eq('id', id)
@@ -70,15 +66,40 @@ export function useStore(userId) {
     }))
   }, [])
 
-  const addSubcategory = useCallback(async (catId, name) => {
-    const { data: row, error } = await supabase
-      .from('subcategories')
-      .insert({ user_id: userId, cat_id: catId, name })
-      .select()
-      .single()
+  const moveCategory = useCallback(async (id, direction, currentCats) => {
+    const sorted = [...currentCats].sort((a, b) => (a.sortOrder ?? 0) - (b.sortOrder ?? 0))
+    const idx    = sorted.findIndex(c => c.id === id)
+    const target = direction === 'up' ? idx - 1 : idx + 1
+    if (idx < 0 || target < 0 || target >= sorted.length) return
+    const a = sorted[idx], b = sorted[target]
+    const aOrd = a.sortOrder ?? idx, bOrd = b.sortOrder ?? target
+    const [r1, r2] = await Promise.all([
+      supabase.from('categories').update({ sort_order: bOrd }).eq('id', a.id),
+      supabase.from('categories').update({ sort_order: aOrd }).eq('id', b.id),
+    ])
+    throwIf(r1.error, 'moveCategory'); throwIf(r2.error, 'moveCategory')
+    setData(d => ({
+      ...d,
+      categories: d.categories
+        .map(c => c.id === a.id ? { ...c, sortOrder: bOrd } : c.id === b.id ? { ...c, sortOrder: aOrd } : c)
+        .sort((x, y) => (x.sortOrder ?? 0) - (y.sortOrder ?? 0)),
+    }))
+  }, [])
+
+  const addSubcategory = useCallback(async (catId, name, sortOrder = 0) => {
+    const { data: row, error } = await supabase.from('subcategories')
+      .insert({ user_id: userId, cat_id: catId, name, sort_order: sortOrder }).select().single()
     throwIf(error, 'addSubcategory')
     setData(d => ({ ...d, subcategories: [...d.subcategories, mapSub(row)] }))
   }, [userId])
+
+  const updateSubcategory = useCallback(async (id, fields) => {
+    const patch = {}
+    if (fields.name !== undefined) patch.name = fields.name
+    const { error } = await supabase.from('subcategories').update(patch).eq('id', id)
+    throwIf(error, 'updateSubcategory')
+    setData(d => ({ ...d, subcategories: d.subcategories.map(s => s.id === id ? { ...s, ...fields } : s) }))
+  }, [])
 
   const deleteSubcategory = useCallback(async (id) => {
     const { error } = await supabase.from('subcategories').delete().eq('id', id)
@@ -90,33 +111,46 @@ export function useStore(userId) {
     }))
   }, [])
 
-  const addPrompt = useCallback(async (prompt) => {
-    const { data: row, error } = await supabase
-      .from('prompts')
-      .insert({
-        user_id: userId,
-        cat_id:  prompt.catId,
-        sub_id:  prompt.subId || null,
-        name:    prompt.name,
-        text:    prompt.text || '',
-        aspect:  prompt.aspect || '1:1',
-      })
-      .select()
-      .single()
+  const moveSubcategory = useCallback(async (id, direction, allSubs) => {
+    const sub     = allSubs.find(s => s.id === id); if (!sub) return
+    const catSubs = allSubs.filter(s => s.catId === sub.catId).sort((a, b) => (a.sortOrder ?? 0) - (b.sortOrder ?? 0))
+    const idx     = catSubs.findIndex(s => s.id === id)
+    const target  = direction === 'up' ? idx - 1 : idx + 1
+    if (idx < 0 || target < 0 || target >= catSubs.length) return
+    const a = catSubs[idx], b = catSubs[target]
+    const aOrd = a.sortOrder ?? idx, bOrd = b.sortOrder ?? target
+    const [r1, r2] = await Promise.all([
+      supabase.from('subcategories').update({ sort_order: bOrd }).eq('id', a.id),
+      supabase.from('subcategories').update({ sort_order: aOrd }).eq('id', b.id),
+    ])
+    throwIf(r1.error, 'moveSubcategory'); throwIf(r2.error, 'moveSubcategory')
+    setData(d => ({
+      ...d,
+      subcategories: d.subcategories
+        .map(s => s.id === a.id ? { ...s, sortOrder: bOrd } : s.id === b.id ? { ...s, sortOrder: aOrd } : s)
+        .sort((x, y) => (x.sortOrder ?? 0) - (y.sortOrder ?? 0)),
+    }))
+  }, [])
+
+  const addPrompt = useCallback(async ({ catId, subId, name, text, aspect }) => {
+    const { data: row, error } = await supabase.from('prompts')
+      .insert({ user_id: userId, cat_id: catId, sub_id: subId || null, name, text, aspect: aspect || '1:1' })
+      .select().single()
     throwIf(error, 'addPrompt')
     setData(d => ({ ...d, prompts: [...d.prompts, mapPrompt(row)] }))
   }, [userId])
 
-  const updatePrompt = useCallback(async (id, fields) => {
-    const patch = {}
-    if (fields.catId  !== undefined) patch.cat_id = fields.catId
-    if (fields.subId  !== undefined) patch.sub_id = fields.subId || null
-    if (fields.name   !== undefined) patch.name   = fields.name
-    if (fields.text   !== undefined) patch.text   = fields.text
-    if (fields.aspect !== undefined) patch.aspect = fields.aspect
-    const { error } = await supabase.from('prompts').update(patch).eq('id', id)
+  const updatePrompt = useCallback(async (id, { catId, subId, name, text, aspect }) => {
+    const { error } = await supabase.from('prompts')
+      .update({ cat_id: catId, sub_id: subId || null, name, text, aspect: aspect || '1:1' })
+      .eq('id', id)
     throwIf(error, 'updatePrompt')
-    setData(d => ({ ...d, prompts: d.prompts.map(p => p.id === id ? { ...p, ...fields } : p) }))
+    setData(d => ({
+      ...d,
+      prompts: d.prompts.map(p =>
+        p.id === id ? { ...p, catId, subId: subId || null, name, text, aspect: aspect || '1:1' } : p
+      ),
+    }))
   }, [])
 
   const deletePrompt = useCallback(async (id) => {
@@ -125,65 +159,53 @@ export function useStore(userId) {
     setData(d => ({ ...d, prompts: d.prompts.filter(p => p.id !== id) }))
   }, [])
 
-  const setPromptImage = useCallback(async (id, img) => {
-    const { error } = await supabase.from('prompts').update({ img }).eq('id', id)
-    throwIf(error, 'setPromptImage')
-    setData(d => ({ ...d, prompts: d.prompts.map(p => p.id === id ? { ...p, img } : p) }))
-  }, [])
+  const setPromptImage = useCallback(async (id, file) => {
+    const ext  = file.name.split('.').pop()
+    const path = userId + '/' + id + '.' + ext
+    const { error: upErr } = await supabase.storage
+      .from('prompt-images').upload(path, file, { upsert: true })
+    throwIf(upErr, 'setPromptImage upload')
+    const { data: { publicUrl } } = supabase.storage.from('prompt-images').getPublicUrl(path)
+    const { error: dbErr } = await supabase.from('prompts').update({ img: publicUrl }).eq('id', id)
+    throwIf(dbErr, 'setPromptImage update')
+    setData(d => ({ ...d, prompts: d.prompts.map(p => p.id === id ? { ...p, img: publicUrl } : p) }))
+  }, [userId])
 
   const migrateFromLocalStorage = useCallback(async () => {
-    const KEY = 'prompt_gallery_v1'
-    const raw = localStorage.getItem(KEY)
+    const raw = localStorage.getItem('promptGalleryData')
     if (!raw) return
     try {
-      const local = JSON.parse(raw)
-      if (!local.categories?.length && !local.prompts?.length) {
-        localStorage.removeItem(KEY); return
-      }
-      const idMap = {}
-      for (const cat of (local.categories || [])) {
-        const { data: row, error } = await supabase
-          .from('categories').insert({ user_id: userId, name: cat.name, icon: cat.icon })
+      const old = JSON.parse(raw)
+      for (const cat of (old.categories || [])) {
+        const { data: cRow, error: cErr } = await supabase.from('categories')
+          .insert({ user_id: userId, name: cat.name, icon: cat.icon || '📁', sort_order: 0 })
           .select().single()
-        if (error) { console.error('[migrate] categories:', error); continue }
-        if (row) idMap[cat.id] = row.id
+        if (cErr) continue
+        const subMap = {}
+        for (const sub of (old.subcategories || []).filter(s => s.catId === cat.id)) {
+          const { data: sRow, error: sErr } = await supabase.from('subcategories')
+            .insert({ user_id: userId, cat_id: cRow.id, name: sub.name, sort_order: 0 })
+            .select().single()
+          if (!sErr) subMap[sub.id] = sRow.id
+        }
+        for (const p of (old.prompts || []).filter(pr => pr.catId === cat.id)) {
+          await supabase.from('prompts').insert({
+            user_id: userId, cat_id: cRow.id,
+            sub_id: p.subId ? (subMap[p.subId] || null) : null,
+            name: p.name, text: p.text || '', aspect: p.aspect || '1:1',
+          })
+        }
       }
-      for (const sub of (local.subcategories || [])) {
-        const newCatId = idMap[sub.catId]
-        if (!newCatId) continue
-        const { data: row, error } = await supabase
-          .from('subcategories').insert({ user_id: userId, cat_id: newCatId, name: sub.name })
-          .select().single()
-        if (error) { console.error('[migrate] subcategories:', error); continue }
-        if (row) idMap[sub.id] = row.id
-      }
-      for (const p of (local.prompts || [])) {
-        const newCatId = idMap[p.catId]
-        if (!newCatId) continue
-        const { error } = await supabase.from('prompts').insert({
-          user_id: userId,
-          cat_id:  newCatId,
-          sub_id:  p.subId ? (idMap[p.subId] || null) : null,
-          name:    p.name,
-          text:    p.text || '',
-          img:     p.img || null,
-          aspect:  p.aspect || '1:1',
-        })
-        if (error) console.error('[migrate] prompts:', error)
-      }
-      localStorage.removeItem(KEY)
+      localStorage.removeItem('promptGalleryData')
       await loadAll()
-    } catch (e) {
-      console.error('[migrate] exception:', e)
-    }
+    } catch (e) { console.error('[useStore] migrate:', e) }
   }, [userId])
 
   return {
     data, loading,
+    addCategory, updateCategory, deleteCategory, moveCategory,
+    addSubcategory, updateSubcategory, deleteSubcategory, moveSubcategory,
+    addPrompt, updatePrompt, deletePrompt, setPromptImage,
     migrateFromLocalStorage,
-    addCategory, deleteCategory,
-    addSubcategory, deleteSubcategory,
-    addPrompt, updatePrompt, deletePrompt,
-    setPromptImage,
   }
 }

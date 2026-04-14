@@ -66,7 +66,7 @@ function MainApp({ session, isDark, setIsDark }) {
   async function saveCategory() {
     if (!form.name?.trim()) return
     try {
-      await store.addCategory(form.name.trim(), form.icon?.trim() || '📁')
+      await store.addCategory(form.name.trim(), form.icon?.trim() || '📁', data.categories.length)
       closeModal()
     } catch (err) { setModalError(err.message) }
   }
@@ -74,12 +74,40 @@ function MainApp({ session, isDark, setIsDark }) {
   async function saveSub() {
     if (!form.name?.trim() || !form.catId) return
     try {
-      await store.addSubcategory(form.catId, form.name.trim())
+      const siblingCount = data.subcategories.filter(s => s.catId === form.catId).length
+      await store.addSubcategory(form.catId, form.name.trim(), siblingCount)
       closeModal()
     } catch (err) { setModalError(err.message) }
   }
 
-  function savePrompt() {
+  function openEditCat(cat) {
+    openModal('editCat', { editId: cat.id, name: cat.name, icon: cat.icon })
+  }
+
+  async function saveEditCat() {
+    if (!form.name?.trim()) return
+    try {
+      await store.updateCategory(form.editId, { name: form.name.trim(), icon: form.icon?.trim() || '📁' })
+      closeModal()
+    } catch (err) { setModalError(err.message) }
+  }
+
+  function openEditSub(sub) {
+    openModal('editSub', { editId: sub.id, name: sub.name })
+  }
+
+  async function saveEditSub() {
+    if (!form.name?.trim()) return
+    try {
+      await store.updateSubcategory(form.editId, { name: form.name.trim() })
+      closeModal()
+    } catch (err) { setModalError(err.message) }
+  }
+
+  function moveCat(id, dir) { store.moveCategory(id, dir, data.categories).catch(console.error) }
+  function moveSub(id, dir) { store.moveSubcategory(id, dir, data.subcategories).catch(console.error) }
+
+  async function savePrompt() {
     if (!form.name?.trim() || !form.catId) return
     const payload = {
       catId:  form.catId,
@@ -148,6 +176,10 @@ function MainApp({ session, isDark, setIsDark }) {
         onAddSub={catId => openModal('sub', { catId })}
         onDeleteCat={deleteCategory}
         onDeleteSub={deleteSub}
+        onEditCat={openEditCat}
+        onEditSub={openEditSub}
+        onMoveCat={moveCat}
+        onMoveSub={moveSub}
       />
       <main className={styles.main}>
         <div className={styles.topbar}>
@@ -259,6 +291,27 @@ function MainApp({ session, isDark, setIsDark }) {
           </Field>
           <Field label='Prompt'>
             <textarea placeholder='Cole aqui o prompt completo...' value={form.text || ''} onChange={f('text')} rows={5} />
+          </Field>
+        </Modal>
+      )}
+
+      {modal === 'editCat' && (
+        <Modal title='Editar categoria' onClose={closeModal} onSave={saveEditCat} saveLabel='Salvar'>
+          {modalError && <p className={styles.modalError}>{modalError}</p>}
+          <Field label='Nome da categoria'>
+            <input placeholder='Ex: Casamento' value={form.name || ''} onChange={f('name')} autoFocus />
+          </Field>
+          <Field label='Icone (emoji)'>
+            <input placeholder='Ex: 💍' value={form.icon || ''} onChange={f('icon')} maxLength={2} />
+          </Field>
+        </Modal>
+      )}
+
+      {modal === 'editSub' && (
+        <Modal title='Editar subcategoria' onClose={closeModal} onSave={saveEditSub} saveLabel='Salvar'>
+          {modalError && <p className={styles.modalError}>{modalError}</p>}
+          <Field label='Nome da subcategoria'>
+            <input placeholder='Ex: Foto Realista' value={form.name || ''} onChange={f('name')} autoFocus />
           </Field>
         </Modal>
       )}

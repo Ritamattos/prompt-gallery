@@ -7,6 +7,7 @@ create table if not exists categories (
   user_id    uuid        references auth.users not null,
   name       text        not null,
   icon       text        not null default '📁',
+  sort_order integer     not null default 0,
   created_at timestamptz default now()
 );
 
@@ -15,6 +16,7 @@ create table if not exists subcategories (
   user_id    uuid        references auth.users not null,
   cat_id     uuid        references categories(id) on delete cascade not null,
   name       text        not null,
+  sort_order integer     not null default 0,
   created_at timestamptz default now()
 );
 

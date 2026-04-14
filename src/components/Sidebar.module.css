@@ -98,19 +98,61 @@
 }
 .item.active .count { background: var(--accent-dim2); color: var(--accent); }
 
-.deleteBtn {
-  width: 16px;
-  height: 16px;
-  border-radius: 3px;
-  background: var(--danger-dim);
-  color: var(--danger);
-  font-size: 9px;
+.menuBtn {
+  width: 20px;
+  height: 20px;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--text3);
   display: flex;
   align-items: center;
   justify-content: center;
   transition: all 0.15s;
+  opacity: 0;
+  flex-shrink: 0;
 }
-.deleteBtn:hover { background: var(--danger); color: #fff; }
+.item:hover .menuBtn,
+.subItem:hover .menuBtn { opacity: 1; }
+.menuBtn:hover { background: var(--bg4); color: var(--text); }
+
+.dropdown {
+  position: fixed;
+  z-index: 1000;
+  background: var(--bg2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: 0 8px 24px rgba(0,0,0,0.18);
+  padding: 4px;
+  min-width: 160px;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.dropdown button {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 10px;
+  border-radius: calc(var(--radius) - 2px);
+  font-size: 13px;
+  color: var(--text2);
+  width: 100%;
+  text-align: left;
+  transition: all 0.12s;
+}
+.dropdown button:hover { background: var(--bg3); color: var(--text); }
+
+.dropdownDivider {
+  height: 1px;
+  background: var(--border);
+  margin: 3px 0;
+}
+
+.dropdownDanger {
+  color: var(--danger) !important;
+}
+.dropdownDanger:hover { background: var(--danger-dim) !important; color: var(--danger) !important; }
 
 .subList {
   padding-left: 12px;
