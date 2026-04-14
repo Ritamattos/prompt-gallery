@@ -18,9 +18,7 @@ export default function PromptCard({ prompt, cat, sub, onEdit, onDelete, onImage
   function handleFile(e) {
     const file = e.target.files[0]
     if (!file) return
-    const reader = new FileReader()
-    reader.onload = ev => onImageUpload(prompt.id, ev.target.result)
-    reader.readAsDataURL(file)
+    onImageUpload(prompt.id, file)
     e.target.value = ''
   }
 
