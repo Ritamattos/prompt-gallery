@@ -152,15 +152,18 @@ export function useStore(userId) {
   }, [])
 
   const setPromptImage = useCallback(async (id, file) => {
-    const ext  = file.name.split('.').pop()
+    const ext  = file.name.split('.').pop() || 'jpg'
     const path = userId + '/' + id + '.' + ext
     const { error: upErr } = await supabase.storage
       .from('prompt-images').upload(path, file, { upsert: true })
     throwIf(upErr, 'setPromptImage upload')
-    const { data: { publicUrl } } = supabase.storage.from('prompt-images').getPublicUrl(path)
-    const { error: dbErr } = await supabase.from('prompts').update({ img: publicUrl }).eq('id', id)
-    throwIf(dbErr, 'setPromptImage update')
+    const { data: urlData } = supabase.storage.from('prompt-images').getPublicUrl(path)
+    const publicUrl = urlData.publicUrl
+    // Update local state immediately so the card shows the image right away
     setData(d => ({ ...d, prompts: d.prompts.map(p => p.id === id ? { ...p, img: publicUrl } : p) }))
+    // Persist URL to database
+    const { error: dbErr } = await supabase.from('prompts').update({ img: publicUrl }).eq('id', id)
+    throwIf(dbErr, 'setPromptImage db')
   }, [userId])
 
   const migrateFromLocalStorage = useCallback(async () => {

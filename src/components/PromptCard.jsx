@@ -5,7 +5,9 @@ import styles from './PromptCard.module.css'
 const ASPECT_CSS = { '9:16': '9/16', '16:9': '16/9', '1:1': '1/1' }
 
 export default function PromptCard({ prompt, cat, sub, onEdit, onDelete, onImageUpload, onImageClick }) {
-  const [copied, setCopied] = useState(false)
+  const [copied, setCopied]       = useState(false)
+  const [uploading, setUploading] = useState(false)
+  const [uploadErr, setUploadErr] = useState(null)
   const fileRef = useRef()
 
   function copy() {
@@ -15,11 +17,19 @@ export default function PromptCard({ prompt, cat, sub, onEdit, onDelete, onImage
     })
   }
 
-  function handleFile(e) {
+  async function handleFile(e) {
     const file = e.target.files[0]
     if (!file) return
-    onImageUpload(prompt.id, file)
     e.target.value = ''
+    setUploading(true)
+    setUploadErr(null)
+    try {
+      await onImageUpload(prompt.id, file)
+    } catch (err) {
+      setUploadErr(err.message || 'Erro ao enviar imagem')
+    } finally {
+      setUploading(false)
+    }
   }
 
   const ratio = ASPECT_CSS[prompt.aspect] || '1/1'
@@ -33,33 +43,37 @@ export default function PromptCard({ prompt, cat, sub, onEdit, onDelete, onImage
         style={{ aspectRatio: ratio }}
         onClick={() => hasImg ? onImageClick(prompt) : fileRef.current.click()}
       >
-        {hasImg
-          ? <img src={prompt.img} alt={prompt.name} className={styles.img} />
-          : (
-            <div className={styles.imgPlaceholder}>
-              <ImagePlus size={22} strokeWidth={1.5} />
-              <span>Subir exemplo</span>
-            </div>
-          )
-        }
-        <div className={styles.imgOverlay}>
-          {hasImg
-            ? (
-              <button
-                className={styles.changeBtn}
-                onClick={e => { e.stopPropagation(); fileRef.current.click() }}
-              >
-                <ImagePlus size={13} /> Trocar imagem
-              </button>
-            )
+        {uploading
+          ? <div className={styles.imgPlaceholder}><span className={styles.uploadingDot}>↑</span><span>Enviando…</span></div>
+          : hasImg
+            ? <img src={prompt.img} alt={prompt.name} className={styles.img} />
             : (
-              <>
-                <ImagePlus size={16} strokeWidth={1.5} />
-                <span>Subir imagem</span>
-              </>
+              <div className={styles.imgPlaceholder}>
+                <ImagePlus size={22} strokeWidth={1.5} />
+                <span>{uploadErr ? 'Erro — tentar de novo' : 'Subir exemplo'}</span>
+              </div>
             )
-          }
-        </div>
+        }
+        {!uploading && (
+          <div className={styles.imgOverlay}>
+            {hasImg
+              ? (
+                <button
+                  className={styles.changeBtn}
+                  onClick={e => { e.stopPropagation(); fileRef.current.click() }}
+                >
+                  <ImagePlus size={13} /> Trocar imagem
+                </button>
+              )
+              : (
+                <>
+                  <ImagePlus size={16} strokeWidth={1.5} />
+                  <span>Subir imagem</span>
+                </>
+              )
+            }
+          </div>
+        )}
       </div>
       <input type="file" ref={fileRef} accept="image/*" style={{ display: 'none' }} onChange={handleFile} />
 

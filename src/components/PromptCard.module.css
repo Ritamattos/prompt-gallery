@@ -42,6 +42,16 @@
 }
 .imgArea:hover .imgPlaceholder { color: var(--text2); }
 
+@keyframes uploadBounce {
+  0%, 100% { transform: translateY(0); }
+  50%       { transform: translateY(-4px); }
+}
+.uploadingDot {
+  font-size: 18px;
+  display: inline-block;
+  animation: uploadBounce 0.8s ease-in-out infinite;
+}
+
 .imgOverlay {
   position: absolute;
   inset: 0;
