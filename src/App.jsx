@@ -4,6 +4,7 @@ import { supabase } from './lib/supabase'
 import { useStore } from './hooks/useStore'
 import Sidebar from './components/Sidebar'
 import PromptCard from './components/PromptCard'
+import AiCard from './components/AiCard'
 import Modal from './components/Modal'
 import Field from './components/Field'
 import Auth from './components/Auth'
@@ -43,6 +44,7 @@ function MainApp({ session, isDark, setIsDark }) {
   const store = useStore(session.user.id)
   const { data, loading } = store
 
+  const [activeView, setActiveView]   = useState('prompts')
   const [selectedCat, setSelectedCat] = useState(null)
   const [selectedSub, setSelectedSub] = useState(null)
   const [search, setSearch]           = useState('')
@@ -52,6 +54,8 @@ function MainApp({ session, isDark, setIsDark }) {
   const [modalError, setModalError]   = useState(null)
   const [draggedPId, setDraggedPId]   = useState(null)
   const [dragOverPId, setDragOverPId] = useState(null)
+  const [draggedAId, setDraggedAId]   = useState(null)
+  const [dragOverAId, setDragOverAId] = useState(null)
   const migrated = useRef(false)
 
   useEffect(() => {
@@ -123,6 +127,37 @@ function MainApp({ session, isDark, setIsDark }) {
     const [item] = next.splice(from, 1)
     next.splice(to, 0, item)
     store.reorderPrompts(next.map(p => p.id)).catch(console.error)
+  }
+
+  function aiDragStart(id) { setDraggedAId(id) }
+  function aiDragOver(e, id) { e.preventDefault(); if (id !== draggedAId) setDragOverAId(id) }
+  function aiDragEnd() { setDraggedAId(null); setDragOverAId(null) }
+  function aiDrop(targetId) {
+    setDragOverAId(null)
+    if (!draggedAId || draggedAId === targetId) { setDraggedAId(null); return }
+    const sorted = [...data.aiTools].sort((a, b) => (a.sortOrder ?? 0) - (b.sortOrder ?? 0))
+    const from = sorted.findIndex(a => a.id === draggedAId)
+    const to   = sorted.findIndex(a => a.id === targetId)
+    setDraggedAId(null)
+    if (from < 0 || to < 0) return
+    const next = [...sorted]
+    const [item] = next.splice(from, 1)
+    next.splice(to, 0, item)
+    store.reorderAiTools(next.map(a => a.id)).catch(console.error)
+  }
+
+  async function saveAiTool() {
+    if (!form.name?.trim()) return
+    const payload = {
+      name:        form.name.trim(),
+      description: form.description?.trim() || '',
+      url:         form.url?.trim() || '',
+    }
+    try {
+      if (form.editId) await store.updateAiTool(form.editId, payload)
+      else             await store.addAiTool(payload)
+      closeModal()
+    } catch (err) { setModalError(err.message) }
   }
 
   async function savePrompt() {
@@ -198,61 +233,117 @@ function MainApp({ session, isDark, setIsDark }) {
         onEditSub={openEditSub}
         onReorderCats={reorderCats}
         onReorderSubs={reorderSubs}
+        activeView={activeView}
+        onViewChange={setActiveView}
       />
       <main className={styles.main}>
-        <div className={styles.topbar}>
-          <div className={styles.viewHead}>
-            <h1 className={styles.viewTitle}>{viewTitle}</h1>
-            <span className={styles.viewCount}>{filtered.length} prompt{filtered.length !== 1 ? 's' : ''}</span>
-          </div>
-          <div className={styles.actions}>
-            <button className={styles.themeBtn} onClick={() => setIsDark(d => !d)} title={isDark ? 'Modo claro' : 'Modo escuro'}>
-              {isDark ? <Sun size={16} /> : <Moon size={16} />}
-            </button>
-            <div className={styles.searchWrap}>
-              <Search size={14} className={styles.searchIcon} />
-              <input className={styles.search} placeholder='Buscar prompts...' value={search} onChange={e => setSearch(e.target.value)} />
+        {activeView === 'prompts' ? (
+          <>
+            <div className={styles.topbar}>
+              <div className={styles.viewHead}>
+                <h1 className={styles.viewTitle}>{viewTitle}</h1>
+                <span className={styles.viewCount}>{filtered.length} prompt{filtered.length !== 1 ? 's' : ''}</span>
+              </div>
+              <div className={styles.actions}>
+                <button className={styles.themeBtn} onClick={() => setIsDark(d => !d)} title={isDark ? 'Modo claro' : 'Modo escuro'}>
+                  {isDark ? <Sun size={16} /> : <Moon size={16} />}
+                </button>
+                <div className={styles.searchWrap}>
+                  <Search size={14} className={styles.searchIcon} />
+                  <input className={styles.search} placeholder='Buscar prompts...' value={search} onChange={e => setSearch(e.target.value)} />
+                </div>
+                <button className={styles.addBtn} onClick={() => openModal('prompt', { catId: selectedCat || data.categories[0]?.id, subId: selectedSub, aspect: '1:1' })}>
+                  <Plus size={15} /> Novo prompt
+                </button>
+                <button className={styles.logoutBtn} onClick={handleLogout} title='Sair'>
+                  <LogOut size={15} />
+                </button>
+              </div>
             </div>
-            <button className={styles.addBtn} onClick={() => openModal('prompt', { catId: selectedCat || data.categories[0]?.id, subId: selectedSub, aspect: '1:1' })}>
-              <Plus size={15} /> Novo prompt
-            </button>
-            <button className={styles.logoutBtn} onClick={handleLogout} title='Sair'>
-              <LogOut size={15} />
-            </button>
-          </div>
-        </div>
 
-        {loading ? (
-          <div className={styles.loadingData}><span className={styles.loadingIcon}>✶</span></div>
-        ) : filtered.length === 0 ? (
-          <div className={styles.empty}>
-            <div className={styles.emptyIcon}>✶</div>
-            <p>Nenhum prompt aqui ainda</p>
-            <button className={styles.emptyBtn} onClick={() => openModal('prompt', { catId: selectedCat || data.categories[0]?.id, subId: selectedSub, aspect: '1:1' })}>
-              + Adicionar primeiro prompt
-            </button>
-          </div>
+            {loading ? (
+              <div className={styles.loadingData}><span className={styles.loadingIcon}>✶</span></div>
+            ) : filtered.length === 0 ? (
+              <div className={styles.empty}>
+                <div className={styles.emptyIcon}>✶</div>
+                <p>Nenhum prompt aqui ainda</p>
+                <button className={styles.emptyBtn} onClick={() => openModal('prompt', { catId: selectedCat || data.categories[0]?.id, subId: selectedSub, aspect: '1:1' })}>
+                  + Adicionar primeiro prompt
+                </button>
+              </div>
+            ) : (
+              <div className={styles.grid}>
+                {filtered.map(p => (
+                  <PromptCard
+                    key={p.id}
+                    prompt={p}
+                    cat={data.categories.find(c => c.id === p.catId)}
+                    sub={data.subcategories.find(s => s.id === p.subId)}
+                    onEdit={editPrompt}
+                    onDelete={id => { if (confirm('Excluir este prompt?')) store.deletePrompt(id) }}
+                    onImageUpload={store.setPromptImage}
+                    onImageClick={setImgModal}
+                    dragging={draggedPId === p.id}
+                    dragOver={dragOverPId === p.id}
+                    onDragStart={() => promptDragStart(p.id)}
+                    onDragOver={e => promptDragOver(e, p.id)}
+                    onDrop={() => promptDrop(p.id)}
+                    onDragEnd={promptDragEnd}
+                  />
+                ))}
+              </div>
+            )}
+          </>
         ) : (
-          <div className={styles.grid}>
-            {filtered.map(p => (
-              <PromptCard
-                key={p.id}
-                prompt={p}
-                cat={data.categories.find(c => c.id === p.catId)}
-                sub={data.subcategories.find(s => s.id === p.subId)}
-                onEdit={editPrompt}
-                onDelete={id => { if (confirm('Excluir este prompt?')) store.deletePrompt(id) }}
-                onImageUpload={store.setPromptImage}
-                onImageClick={setImgModal}
-                dragging={draggedPId === p.id}
-                dragOver={dragOverPId === p.id}
-                onDragStart={() => promptDragStart(p.id)}
-                onDragOver={e => promptDragOver(e, p.id)}
-                onDrop={() => promptDrop(p.id)}
-                onDragEnd={promptDragEnd}
-              />
-            ))}
-          </div>
+          <>
+            <div className={styles.topbar}>
+              <div className={styles.viewHead}>
+                <h1 className={styles.viewTitle}>Galeria de IAs</h1>
+                <span className={styles.viewCount}>{data.aiTools.length} ferramenta{data.aiTools.length !== 1 ? 's' : ''}</span>
+              </div>
+              <div className={styles.actions}>
+                <button className={styles.themeBtn} onClick={() => setIsDark(d => !d)} title={isDark ? 'Modo claro' : 'Modo escuro'}>
+                  {isDark ? <Sun size={16} /> : <Moon size={16} />}
+                </button>
+                <button className={styles.addBtn} onClick={() => openModal('aiTool', {})}>
+                  <Plus size={15} /> Nova IA
+                </button>
+                <button className={styles.logoutBtn} onClick={handleLogout} title='Sair'>
+                  <LogOut size={15} />
+                </button>
+              </div>
+            </div>
+
+            {loading ? (
+              <div className={styles.loadingData}><span className={styles.loadingIcon}>✶</span></div>
+            ) : data.aiTools.length === 0 ? (
+              <div className={styles.empty}>
+                <div className={styles.emptyIcon}>✦</div>
+                <p>Nenhuma ferramenta de IA aqui ainda</p>
+                <button className={styles.emptyBtn} onClick={() => openModal('aiTool', {})}>
+                  + Adicionar primeira IA
+                </button>
+              </div>
+            ) : (
+              <div className={styles.grid}>
+                {[...data.aiTools].sort((a, b) => (a.sortOrder ?? 0) - (b.sortOrder ?? 0)).map(tool => (
+                  <AiCard
+                    key={tool.id}
+                    tool={tool}
+                    onEdit={t => openModal('aiTool', { editId: t.id, name: t.name, description: t.description, url: t.url })}
+                    onDelete={id => { if (confirm('Excluir esta ferramenta?')) store.deleteAiTool(id) }}
+                    onImageUpload={store.setAiToolImage}
+                    dragging={draggedAId === tool.id}
+                    dragOver={dragOverAId === tool.id}
+                    onDragStart={() => aiDragStart(tool.id)}
+                    onDragOver={e => aiDragOver(e, tool.id)}
+                    onDrop={() => aiDrop(tool.id)}
+                    onDragEnd={aiDragEnd}
+                  />
+                ))}
+              </div>
+            )}
+          </>
         )}
       </main>
       {modal === 'cat' && (
@@ -336,6 +427,26 @@ function MainApp({ session, isDark, setIsDark }) {
           {modalError && <p className={styles.modalError}>{modalError}</p>}
           <Field label='Nome da subcategoria'>
             <input placeholder='Ex: Foto Realista' value={form.name || ''} onChange={f('name')} autoFocus />
+          </Field>
+        </Modal>
+      )}
+
+      {modal === 'aiTool' && (
+        <Modal
+          title={form.editId ? 'Editar IA' : 'Nova IA'}
+          onClose={closeModal}
+          onSave={saveAiTool}
+          saveLabel={form.editId ? 'Salvar' : 'Adicionar'}
+        >
+          {modalError && <p className={styles.modalError}>{modalError}</p>}
+          <Field label='Nome da ferramenta'>
+            <input placeholder='Ex: Midjourney' value={form.name || ''} onChange={f('name')} autoFocus />
+          </Field>
+          <Field label='Descrição'>
+            <textarea placeholder='Descreva para que serve esta ferramenta...' value={form.description || ''} onChange={f('description')} rows={3} />
+          </Field>
+          <Field label='Link (URL)'>
+            <input placeholder='https://...' value={form.url || ''} onChange={f('url')} />
           </Field>
         </Modal>
       )}

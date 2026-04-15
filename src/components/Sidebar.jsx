@@ -9,6 +9,7 @@ export default function Sidebar({
   onDeleteCat, onDeleteSub,
   onEditCat, onEditSub,
   onReorderCats, onReorderSubs,
+  activeView, onViewChange,
 }) {
   const [menu, setMenu]           = useState(null)
   const [draggedId, setDraggedId] = useState(null)
@@ -83,10 +84,21 @@ export default function Sidebar({
     <aside className={styles.sidebar}>
       <div className={styles.logo}>
         <span className={styles.logoIcon}>✦</span>
-        <span className={styles.logoText}>Prompts</span>
+        <span className={styles.logoText}>Galeria</span>
       </div>
 
-      <div className={styles.section}>
+      <div className={styles.viewTabs}>
+        <button
+          className={`${styles.viewTab} ${activeView === 'prompts' ? styles.viewTabActive : ''}`}
+          onClick={() => onViewChange('prompts')}
+        >Prompts</button>
+        <button
+          className={`${styles.viewTab} ${activeView === 'ias' ? styles.viewTabActive : ''}`}
+          onClick={() => onViewChange('ias')}
+        >IAs</button>
+      </div>
+
+      {activeView === 'prompts' && <div className={styles.section}>
         <div className={styles.sectionHeader}>
           <span className={styles.sectionLabel}>Categorias</span>
           <button className={styles.addBtn} onClick={onAddCat} title="Nova categoria">+</button>
@@ -180,7 +192,7 @@ export default function Sidebar({
             </div>
           )
         })}
-      </div>
+      </div>}
 
       {menu && (
         <div

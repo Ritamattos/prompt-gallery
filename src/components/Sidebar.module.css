@@ -35,6 +35,29 @@
   letter-spacing: -0.02em;
 }
 
+.viewTabs {
+  display: flex;
+  gap: 4px;
+  padding: 0 0.75rem 0.75rem;
+  border-bottom: 1px solid var(--border);
+  margin-bottom: 0.75rem;
+}
+
+.viewTab {
+  flex: 1;
+  padding: 6px 0;
+  border-radius: var(--radius);
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  color: var(--text3);
+  background: transparent;
+  border: 1px solid transparent;
+  transition: all 0.15s;
+}
+.viewTab:hover { color: var(--text2); background: var(--bg3); }
+.viewTabActive { color: var(--accent) !important; background: var(--accent-dim) !important; border-color: var(--accent-dim2) !important; }
+
 .section { padding: 0 0.75rem 1rem; }
 
 .sectionHeader {

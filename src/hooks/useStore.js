@@ -4,7 +4,8 @@ import { supabase } from '../lib/supabase'
 const mapCat    = r => ({ id: r.id, name: r.name, icon: r.icon, sortOrder: r.sort_order ?? 0 })
 const mapSub    = r => ({ id: r.id, catId: r.cat_id, name: r.name, sortOrder: r.sort_order ?? 0 })
 const mapPrompt = r => ({ id: r.id, catId: r.cat_id, subId: r.sub_id, name: r.name, text: r.text, img: r.img, aspect: r.aspect || '1:1', sortOrder: r.sort_order ?? 0 })
-const EMPTY = { categories: [], subcategories: [], prompts: [] }
+const mapAiTool = r => ({ id: r.id, name: r.name, description: r.description || '', url: r.url || '', img: r.img, sortOrder: r.sort_order ?? 0 })
+const EMPTY = { categories: [], subcategories: [], prompts: [], aiTools: [] }
 
 function throwIf(error, label) {
   if (error) { console.error('[useStore] ' + label + ':', error); throw new Error(error.message || label) }
@@ -22,24 +23,28 @@ export function useStore(userId) {
   async function loadAll() {
     setLoading(true)
     try {
-      const [cR, sR, pR] = await Promise.all([
+      const [cR, sR, pR, aR] = await Promise.all([
         supabase.from('categories').select('*').order('sort_order').order('created_at'),
         supabase.from('subcategories').select('*').order('sort_order').order('created_at'),
         supabase.from('prompts').select('*').order('sort_order').order('created_at'),
+        supabase.from('ai_tools').select('*').order('sort_order').order('created_at'),
       ])
       // If sort_order column doesn't exist yet, fall back to ordering by created_at only
-      const [cFinal, sFinal, pFinal] = await Promise.all([
+      const [cFinal, sFinal, pFinal, aFinal] = await Promise.all([
         cR.error ? supabase.from('categories').select('*').order('created_at') : Promise.resolve(cR),
         sR.error ? supabase.from('subcategories').select('*').order('created_at') : Promise.resolve(sR),
         pR.error ? supabase.from('prompts').select('*').order('created_at') : Promise.resolve(pR),
+        aR.error ? supabase.from('ai_tools').select('*').order('created_at') : Promise.resolve(aR),
       ])
       if (cFinal.error) console.error('[useStore] categories:', cFinal.error)
       if (sFinal.error) console.error('[useStore] subcategories:', sFinal.error)
       if (pFinal.error) console.error('[useStore] prompts:', pFinal.error)
+      if (aFinal.error) console.error('[useStore] ai_tools:', aFinal.error)
       setData({
         categories:    (cFinal.data || []).map(mapCat),
         subcategories: (sFinal.data || []).map(mapSub),
         prompts:       (pFinal.data || []).map(mapPrompt),
+        aiTools:       (aFinal.data || []).map(mapAiTool),
       })
     } catch (e) { console.error('[useStore] loadAll:', e) }
     finally { setLoading(false) }
@@ -197,6 +202,57 @@ export function useStore(userId) {
     } catch (e) { console.error('[useStore] migrate:', e) }
   }, [userId])
 
+  const addAiTool = useCallback(async ({ name, description, url }) => {
+    const { data: row, error } = await supabase.from('ai_tools')
+      .insert({ user_id: userId, name, description: description || '', url: url || '', sort_order: 0 })
+      .select().single()
+    throwIf(error, 'addAiTool')
+    setData(d => ({ ...d, aiTools: [...d.aiTools, mapAiTool(row)] }))
+  }, [userId])
+
+  const updateAiTool = useCallback(async (id, fields) => {
+    const patch = {}
+    if (fields.name        !== undefined) patch.name        = fields.name
+    if (fields.description !== undefined) patch.description = fields.description
+    if (fields.url         !== undefined) patch.url         = fields.url
+    const { error } = await supabase.from('ai_tools').update(patch).eq('id', id)
+    throwIf(error, 'updateAiTool')
+    setData(d => ({ ...d, aiTools: d.aiTools.map(a => a.id === id ? { ...a, ...fields } : a) }))
+  }, [])
+
+  const deleteAiTool = useCallback(async (id) => {
+    const { error } = await supabase.from('ai_tools').delete().eq('id', id)
+    throwIf(error, 'deleteAiTool')
+    setData(d => ({ ...d, aiTools: d.aiTools.filter(a => a.id !== id) }))
+  }, [])
+
+  const setAiToolImage = useCallback(async (id, file) => {
+    const ext  = file.name.split('.').pop() || 'jpg'
+    const path = userId + '/ai/' + id + '.' + ext
+    const { error: upErr } = await supabase.storage
+      .from('prompt-images').upload(path, file, { upsert: true })
+    throwIf(upErr, 'setAiToolImage upload')
+    const { data: urlData } = supabase.storage.from('prompt-images').getPublicUrl(path)
+    const publicUrl = urlData.publicUrl
+    setData(d => ({ ...d, aiTools: d.aiTools.map(a => a.id === id ? { ...a, img: publicUrl } : a) }))
+    const { error: dbErr } = await supabase.from('ai_tools').update({ img: publicUrl }).eq('id', id)
+    throwIf(dbErr, 'setAiToolImage db')
+  }, [userId])
+
+  const reorderAiTools = useCallback(async (orderedIds) => {
+    const updates = orderedIds.map((id, i) => ({ id, sortOrder: i }))
+    const results = await Promise.all(
+      updates.map(u => supabase.from('ai_tools').update({ sort_order: u.sortOrder }).eq('id', u.id))
+    )
+    results.forEach((r, i) => throwIf(r.error, 'reorderAiTools #' + i))
+    setData(d => ({
+      ...d,
+      aiTools: d.aiTools
+        .map(a => { const u = updates.find(u => u.id === a.id); return u ? { ...a, sortOrder: u.sortOrder } : a })
+        .sort((a, b) => (a.sortOrder ?? 0) - (b.sortOrder ?? 0)),
+    }))
+  }, [])
+
   const reorderPrompts = useCallback(async (orderedIds) => {
     const updates = orderedIds.map((id, i) => ({ id, sortOrder: i }))
     const results = await Promise.all(
@@ -216,6 +272,7 @@ export function useStore(userId) {
     addCategory, updateCategory, deleteCategory, reorderCategories,
     addSubcategory, updateSubcategory, deleteSubcategory, reorderSubcategories,
     addPrompt, updatePrompt, deletePrompt, setPromptImage, reorderPrompts,
+    addAiTool, updateAiTool, deleteAiTool, setAiToolImage, reorderAiTools,
     migrateFromLocalStorage,
   }
 }
