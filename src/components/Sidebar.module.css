@@ -21,10 +21,11 @@
   margin-bottom: 0.75rem;
 }
 
-.logoIcon {
-  color: var(--accent);
-  font-size: 18px;
-  line-height: 1;
+.logoImg {
+  width: 32px;
+  height: 32px;
+  object-fit: contain;
+  flex-shrink: 0;
 }
 
 .logoText {
