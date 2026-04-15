@@ -33,9 +33,19 @@ create table if not exists prompts (
   created_at timestamptz default now()
 );
 
+create table if not exists ai_categories (
+  id         uuid        default gen_random_uuid() primary key,
+  user_id    uuid        references auth.users not null,
+  name       text        not null,
+  icon       text        not null default '🤖',
+  sort_order integer     not null default 0,
+  created_at timestamptz default now()
+);
+
 create table if not exists ai_tools (
   id          uuid        default gen_random_uuid() primary key,
   user_id     uuid        references auth.users not null,
+  ai_cat_id   uuid        references ai_categories(id) on delete set null,
   name        text        not null,
   description text        not null default '',
   url         text        not null default '',
@@ -48,6 +58,7 @@ create table if not exists ai_tools (
 alter table categories    enable row level security;
 alter table subcategories enable row level security;
 alter table prompts       enable row level security;
+alter table ai_categories enable row level security;
 alter table ai_tools      enable row level security;
 
 create policy "Usuários gerenciam suas categorias"
@@ -62,6 +73,11 @@ create policy "Usuários gerenciam suas subcategorias"
 
 create policy "Usuários gerenciam seus prompts"
   on prompts for all
+  using  (auth.uid() = user_id)
+  with check (auth.uid() = user_id);
+
+create policy "Usuários gerenciam suas categorias de IA"
+  on ai_categories for all
   using  (auth.uid() = user_id)
   with check (auth.uid() = user_id);
 

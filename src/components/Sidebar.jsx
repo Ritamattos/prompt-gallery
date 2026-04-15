@@ -10,6 +10,8 @@ export default function Sidebar({
   onEditCat, onEditSub,
   onReorderCats, onReorderSubs,
   activeView, onViewChange,
+  selectedAiCat, onSelectAiCat,
+  onAddAiCat, onDeleteAiCat, onEditAiCat,
 }) {
   const [menu, setMenu]           = useState(null)
   const [draggedId, setDraggedId] = useState(null)
@@ -97,6 +99,44 @@ export default function Sidebar({
           onClick={() => onViewChange('ias')}
         >IAs</button>
       </div>
+
+      {activeView === 'ias' && <div className={styles.section}>
+        <div className={styles.sectionHeader}>
+          <span className={styles.sectionLabel}>Categorias</span>
+          <button className={styles.addBtn} onClick={onAddAiCat} title="Nova categoria">+</button>
+        </div>
+
+        <div
+          className={`${styles.item} ${!selectedAiCat ? styles.active : ''}`}
+          onClick={() => onSelectAiCat(null)}
+        >
+          <span className={styles.itemIcon}>◈</span>
+          <span className={styles.itemName}>Todos</span>
+          <span className={styles.count}>{data.aiTools.length}</span>
+        </div>
+
+        {[...data.aiCategories].sort((a, b) => (a.sortOrder ?? 0) - (b.sortOrder ?? 0)).map(cat => (
+          <div key={cat.id} className={styles.dragRow}>
+            <div
+              className={`${styles.item} ${selectedAiCat === cat.id ? styles.active : ''}`}
+              onClick={() => onSelectAiCat(cat.id)}
+            >
+              <span className={styles.itemIcon}>{cat.icon}</span>
+              <span className={styles.itemName}>{cat.name}</span>
+              <div className={styles.itemRight}>
+                <button
+                  className={styles.menuBtn}
+                  onClick={e => openMenu(e, 'aiCat', cat.id)}
+                  title="Opções"
+                >
+                  <MoreHorizontal size={13} />
+                </button>
+                <span className={styles.count}>{data.aiTools.filter(a => a.aiCatId === cat.id).length}</span>
+              </div>
+            </div>
+          </div>
+        ))}
+      </div>}
 
       {activeView === 'prompts' && <div className={styles.section}>
         <div className={styles.sectionHeader}>
@@ -201,8 +241,9 @@ export default function Sidebar({
           onClick={e => e.stopPropagation()}
         >
           <button onClick={() => {
-            if (menu.type === 'cat') onEditCat(data.categories.find(c => c.id === menu.id))
-            else                    onEditSub(data.subcategories.find(s => s.id === menu.id))
+            if (menu.type === 'cat')   onEditCat(data.categories.find(c => c.id === menu.id))
+            else if (menu.type === 'sub')   onEditSub(data.subcategories.find(s => s.id === menu.id))
+            else if (menu.type === 'aiCat') onEditAiCat(data.aiCategories.find(c => c.id === menu.id))
             closeMenu()
           }}>
             <Pencil size={12} /> Editar
@@ -213,8 +254,9 @@ export default function Sidebar({
           <button
             className={styles.dropdownDanger}
             onClick={() => {
-              if (menu.type === 'cat') onDeleteCat(menu.id)
-              else                    onDeleteSub(menu.id)
+              if (menu.type === 'cat')        onDeleteCat(menu.id)
+              else if (menu.type === 'sub')   onDeleteSub(menu.id)
+              else if (menu.type === 'aiCat') onDeleteAiCat(menu.id)
               closeMenu()
             }}
           >

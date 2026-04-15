@@ -56,6 +56,7 @@ function MainApp({ session, isDark, setIsDark }) {
   const [dragOverPId, setDragOverPId] = useState(null)
   const [draggedAId, setDraggedAId]   = useState(null)
   const [dragOverAId, setDragOverAId] = useState(null)
+  const [selectedAiCat, setSelectedAiCat] = useState(null)
   const migrated = useRef(false)
 
   useEffect(() => {
@@ -113,6 +114,32 @@ function MainApp({ session, isDark, setIsDark }) {
   function reorderCats(orderedIds) { store.reorderCategories(orderedIds).catch(console.error) }
   function reorderSubs(catId, orderedIds) { store.reorderSubcategories(catId, orderedIds).catch(console.error) }
 
+  async function saveAiCategory() {
+    if (!form.name?.trim()) return
+    try {
+      await store.addAiCategory(form.name.trim(), form.icon?.trim() || '🤖')
+      closeModal()
+    } catch (err) { setModalError(err.message) }
+  }
+
+  function openEditAiCat(cat) {
+    openModal('editAiCat', { editId: cat.id, name: cat.name, icon: cat.icon })
+  }
+
+  async function saveEditAiCat() {
+    if (!form.name?.trim()) return
+    try {
+      await store.updateAiCategory(form.editId, { name: form.name.trim(), icon: form.icon?.trim() || '🤖' })
+      closeModal()
+    } catch (err) { setModalError(err.message) }
+  }
+
+  function deleteAiCat(id) {
+    if (!confirm('Excluir categoria? As IAs desta categoria ficarão sem categoria.')) return
+    if (selectedAiCat === id) setSelectedAiCat(null)
+    store.deleteAiCategory(id).catch(console.error)
+  }
+
   function promptDragStart(id) { setDraggedPId(id) }
   function promptDragOver(e, id) { e.preventDefault(); if (id !== draggedPId) setDragOverPId(id) }
   function promptDragEnd() { setDraggedPId(null); setDragOverPId(null) }
@@ -135,7 +162,7 @@ function MainApp({ session, isDark, setIsDark }) {
   function aiDrop(targetId) {
     setDragOverAId(null)
     if (!draggedAId || draggedAId === targetId) { setDraggedAId(null); return }
-    const sorted = [...data.aiTools].sort((a, b) => (a.sortOrder ?? 0) - (b.sortOrder ?? 0))
+    const sorted = filteredAiTools
     const from = sorted.findIndex(a => a.id === draggedAId)
     const to   = sorted.findIndex(a => a.id === targetId)
     setDraggedAId(null)
@@ -149,6 +176,7 @@ function MainApp({ session, isDark, setIsDark }) {
   async function saveAiTool() {
     if (!form.name?.trim()) return
     const payload = {
+      aiCatId:     form.aiCatId || null,
       name:        form.name.trim(),
       description: form.description?.trim() || '',
       url:         form.url?.trim() || '',
@@ -212,6 +240,10 @@ function MainApp({ session, isDark, setIsDark }) {
       const q = search.toLowerCase()
       return p.name.toLowerCase().includes(q) || p.text.toLowerCase().includes(q)
     })
+  const filteredAiTools = [...data.aiTools]
+    .filter(t => selectedAiCat ? t.aiCatId === selectedAiCat : true)
+    .sort((a, b) => (a.sortOrder ?? 0) - (b.sortOrder ?? 0))
+
   const cat       = data.categories.find(c => c.id === selectedCat)
   const sub       = data.subcategories.find(s => s.id === selectedSub)
   const viewTitle = sub?.name ?? (cat ? (cat.icon + ' ' + cat.name) : 'Todos os prompts')
@@ -235,6 +267,11 @@ function MainApp({ session, isDark, setIsDark }) {
         onReorderSubs={reorderSubs}
         activeView={activeView}
         onViewChange={setActiveView}
+        selectedAiCat={selectedAiCat}
+        onSelectAiCat={setSelectedAiCat}
+        onAddAiCat={() => openModal('aiCat')}
+        onDeleteAiCat={deleteAiCat}
+        onEditAiCat={openEditAiCat}
       />
       <main className={styles.main}>
         {activeView === 'prompts' ? (
@@ -299,13 +336,13 @@ function MainApp({ session, isDark, setIsDark }) {
             <div className={styles.topbar}>
               <div className={styles.viewHead}>
                 <h1 className={styles.viewTitle}>Galeria de IAs</h1>
-                <span className={styles.viewCount}>{data.aiTools.length} ferramenta{data.aiTools.length !== 1 ? 's' : ''}</span>
+                <span className={styles.viewCount}>{filteredAiTools.length} ferramenta{filteredAiTools.length !== 1 ? 's' : ''}</span>
               </div>
               <div className={styles.actions}>
                 <button className={styles.themeBtn} onClick={() => setIsDark(d => !d)} title={isDark ? 'Modo claro' : 'Modo escuro'}>
                   {isDark ? <Sun size={16} /> : <Moon size={16} />}
                 </button>
-                <button className={styles.addBtn} onClick={() => openModal('aiTool', {})}>
+                <button className={styles.addBtn} onClick={() => openModal('aiTool', { aiCatId: selectedAiCat })}>
                   <Plus size={15} /> Nova IA
                 </button>
                 <button className={styles.logoutBtn} onClick={handleLogout} title='Sair'>
@@ -316,21 +353,21 @@ function MainApp({ session, isDark, setIsDark }) {
 
             {loading ? (
               <div className={styles.loadingData}><span className={styles.loadingIcon}>✶</span></div>
-            ) : data.aiTools.length === 0 ? (
+            ) : filteredAiTools.length === 0 ? (
               <div className={styles.empty}>
                 <div className={styles.emptyIcon}>✦</div>
                 <p>Nenhuma ferramenta de IA aqui ainda</p>
-                <button className={styles.emptyBtn} onClick={() => openModal('aiTool', {})}>
+                <button className={styles.emptyBtn} onClick={() => openModal('aiTool', { aiCatId: selectedAiCat })}>
                   + Adicionar primeira IA
                 </button>
               </div>
             ) : (
               <div className={styles.grid}>
-                {[...data.aiTools].sort((a, b) => (a.sortOrder ?? 0) - (b.sortOrder ?? 0)).map(tool => (
+                {filteredAiTools.map(tool => (
                   <AiCard
                     key={tool.id}
                     tool={tool}
-                    onEdit={t => openModal('aiTool', { editId: t.id, name: t.name, description: t.description, url: t.url })}
+                    onEdit={t => openModal('aiTool', { editId: t.id, aiCatId: t.aiCatId, name: t.name, description: t.description, url: t.url })}
                     onDelete={id => { if (confirm('Excluir esta ferramenta?')) store.deleteAiTool(id) }}
                     onImageUpload={store.setAiToolImage}
                     dragging={draggedAId === tool.id}
@@ -439,6 +476,12 @@ function MainApp({ session, isDark, setIsDark }) {
           saveLabel={form.editId ? 'Salvar' : 'Adicionar'}
         >
           {modalError && <p className={styles.modalError}>{modalError}</p>}
+          <Field label='Categoria'>
+            <select value={form.aiCatId || ''} onChange={f('aiCatId')}>
+              <option value=''>— Sem categoria —</option>
+              {data.aiCategories.map(c => <option key={c.id} value={c.id}>{c.icon} {c.name}</option>)}
+            </select>
+          </Field>
           <Field label='Nome da ferramenta'>
             <input placeholder='Ex: Midjourney' value={form.name || ''} onChange={f('name')} autoFocus />
           </Field>
@@ -447,6 +490,30 @@ function MainApp({ session, isDark, setIsDark }) {
           </Field>
           <Field label='Link (URL)'>
             <input placeholder='https://...' value={form.url || ''} onChange={f('url')} />
+          </Field>
+        </Modal>
+      )}
+
+      {modal === 'aiCat' && (
+        <Modal title='Nova categoria de IA' onClose={closeModal} onSave={saveAiCategory}>
+          {modalError && <p className={styles.modalError}>{modalError}</p>}
+          <Field label='Nome da categoria'>
+            <input placeholder='Ex: Geração de Imagem' value={form.name || ''} onChange={f('name')} autoFocus />
+          </Field>
+          <Field label='Ícone (emoji)'>
+            <input placeholder='Ex: 🎨' value={form.icon || ''} onChange={f('icon')} maxLength={2} />
+          </Field>
+        </Modal>
+      )}
+
+      {modal === 'editAiCat' && (
+        <Modal title='Editar categoria de IA' onClose={closeModal} onSave={saveEditAiCat} saveLabel='Salvar'>
+          {modalError && <p className={styles.modalError}>{modalError}</p>}
+          <Field label='Nome da categoria'>
+            <input placeholder='Ex: Geração de Imagem' value={form.name || ''} onChange={f('name')} autoFocus />
+          </Field>
+          <Field label='Ícone (emoji)'>
+            <input placeholder='Ex: 🎨' value={form.icon || ''} onChange={f('icon')} maxLength={2} />
           </Field>
         </Modal>
       )}
